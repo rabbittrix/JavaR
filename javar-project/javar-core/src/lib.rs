@@ -9,16 +9,20 @@
 //! - [`rollback`] tracks class versions for instant revert
 
 pub mod bridge;
+pub mod classfile;
 pub mod compiler;
 pub mod memory;
 pub mod protocol;
 pub mod rollback;
+pub mod shadow;
 pub mod watcher;
 
 pub use bridge::{AgentBridge, BridgeConfig};
+pub use classfile::{ChangeKind as SchemaChangeKind, ClassSchema};
 pub use compiler::{CompileRequest, Compiler};
 pub use protocol::{Frame, Message, MessageKind};
 pub use rollback::RollbackStore;
+pub use shadow::{ShadowRegistry, ShadowVersion};
 pub use watcher::{WatchConfig, WatchEvent, Watcher};
 
 use anyhow::Result;
@@ -52,12 +56,13 @@ impl Default for CoreConfig {
     }
 }
 
-/// Orchestrates watch → compile → redefine → rollback.
+/// Orchestrates watch → compile → redefine/shadow → rollback.
 pub struct JavaRCore {
     config: CoreConfig,
     bridge: Arc<dyn AgentBridge>,
     compiler: Compiler,
     rollback: Arc<RollbackStore>,
+    shadows: Arc<ShadowRegistry>,
 }
 
 impl JavaRCore {
@@ -72,6 +77,7 @@ impl JavaRCore {
             bridge,
             compiler,
             rollback: Arc::new(RollbackStore::new()),
+            shadows: Arc::new(ShadowRegistry::new()),
         }
     }
 
@@ -92,6 +98,7 @@ impl JavaRCore {
         let bridge = self.bridge.clone();
         let compiler = self.compiler;
         let rollback = self.rollback.clone();
+        let shadows = self.shadows.clone();
 
         // Announce readiness to agent / IDE clients.
         bridge
@@ -99,7 +106,8 @@ impl JavaRCore {
             .await?;
 
         while let Some(event) = watcher.next().await {
-            if let Err(err) = handle_event(&event, &compiler, &bridge, &rollback).await {
+            if let Err(err) = handle_event(&event, &compiler, &bridge, &rollback, &shadows).await
+            {
                 error!(?err, path = %event.path.display(), "hot-reload cycle failed");
                 let _ = bridge
                     .send(Message::error(format!(
@@ -116,6 +124,10 @@ impl JavaRCore {
     pub fn rollback_store(&self) -> Arc<RollbackStore> {
         self.rollback.clone()
     }
+
+    pub fn shadow_registry(&self) -> Arc<ShadowRegistry> {
+        self.shadows.clone()
+    }
 }
 
 async fn handle_event(
@@ -123,6 +135,7 @@ async fn handle_event(
     compiler: &Compiler,
     bridge: &Arc<dyn AgentBridge>,
     rollback: &Arc<RollbackStore>,
+    shadows: &Arc<ShadowRegistry>,
 ) -> Result<()> {
     info!(path = %event.path.display(), kind = ?event.kind, "change detected");
 
@@ -131,26 +144,41 @@ async fn handle_event(
             let req = CompileRequest::from_source(&event.path);
             compiler.compile_async(req).await?
         }
-        watcher::ChangeKind::ClassFile => {
-            // Zero-copy mmap of the .class payload when possible.
-            compiler.load_class_bytes(&event.path)?
-        }
+        watcher::ChangeKind::ClassFile => compiler.load_class_bytes(&event.path)?,
         watcher::ChangeKind::Other => return Ok(()),
     };
 
-    // Snapshot previous bytecode for instant rollback.
     rollback.snapshot(&artifact.class_name, &artifact.bytecode);
 
-    bridge
-        .send(Message::redefine(
-            artifact.class_name.clone(),
-            artifact.bytecode.clone(),
-        ))
-        .await?;
+    let (change, version) =
+        shadows.prepare(&artifact.class_name, artifact.bytecode.clone())?;
+
+    let msg = match change {
+        classfile::ChangeKind::Structural => {
+            info!(
+                class = %artifact.class_name,
+                shadow = %version.shadow_name,
+                v = version.version,
+                "structural change → shadow class path"
+            );
+            Message::structural(
+                version.class_name.clone(),
+                version.shadow_name.clone(),
+                version.version,
+                version.bytecode.clone(),
+            )
+        }
+        classfile::ChangeKind::Compatible => {
+            Message::redefine(version.class_name.clone(), version.bytecode.clone())
+        }
+    };
+
+    bridge.send(msg).await?;
 
     info!(
         class = %artifact.class_name,
         bytes = artifact.bytecode.len(),
+        ?change,
         "bytecode sent to agent"
     );
 

@@ -26,6 +26,8 @@ pub enum MessageKind {
     Rollback = 6,
     Telemetry = 7,
     HotDeploy = 8,
+    /// Structural hot-reload via shadow class (`Original$JavaR_vN`).
+    Structural = 9,
 }
 
 impl MessageKind {
@@ -39,6 +41,7 @@ impl MessageKind {
             6 => Self::Rollback,
             7 => Self::Telemetry,
             8 => Self::HotDeploy,
+            9 => Self::Structural,
             _ => return None,
         })
     }
@@ -50,6 +53,13 @@ pub struct RedefinePayload {
     /// Offset into the frame payload where bytecode begins (after JSON header).
     pub bytecode_offset: u32,
     pub bytecode_len: u32,
+    /// When set, agent should prefer the shadow-class path.
+    #[serde(default)]
+    pub structural: bool,
+    #[serde(default)]
+    pub version: u32,
+    #[serde(default)]
+    pub shadow_name: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -97,30 +107,62 @@ impl Message {
 
     /// Build a redefine message with JSON metadata + raw bytecode (shared `Bytes`).
     pub fn redefine(class_name: impl Into<String>, bytecode: Bytes) -> Self {
+        Self::redefine_ex(class_name, bytecode, false, 0, None, MessageKind::Redefine)
+    }
+
+    /// Structural reload: agent defines `shadow_name` and proxies the original class.
+    pub fn structural(
+        class_name: impl Into<String>,
+        shadow_name: impl Into<String>,
+        version: u32,
+        bytecode: Bytes,
+    ) -> Self {
+        Self::redefine_ex(
+            class_name,
+            bytecode,
+            true,
+            version,
+            Some(shadow_name.into()),
+            MessageKind::Structural,
+        )
+    }
+
+    fn redefine_ex(
+        class_name: impl Into<String>,
+        bytecode: Bytes,
+        structural: bool,
+        version: u32,
+        shadow_name: Option<String>,
+        kind: MessageKind,
+    ) -> Self {
         let class_name = class_name.into();
         let meta = RedefinePayload {
             class_name,
-            bytecode_offset: 0, // filled after header encode
+            bytecode_offset: 0,
             bytecode_len: bytecode.len() as u32,
+            structural,
+            version,
+            shadow_name,
         };
         let mut header = serde_json::to_vec(&meta).expect("redefine json");
-        // Rewrite offset to point past the JSON header + length prefix we embed.
         let offset = (4 + header.len()) as u32;
         let meta = RedefinePayload {
             class_name: meta.class_name,
             bytecode_offset: offset,
             bytecode_len: bytecode.len() as u32,
+            structural: meta.structural,
+            version: meta.version,
+            shadow_name: meta.shadow_name,
         };
         header = serde_json::to_vec(&meta).expect("redefine json");
 
         let mut buf = BytesMut::with_capacity(4 + header.len() + bytecode.len());
         buf.put_u32_le(header.len() as u32);
         buf.extend_from_slice(&header);
-        // Zero-copy extend: Bytes implements Buf / AsRef
         buf.extend_from_slice(&bytecode);
 
         Self {
-            kind: MessageKind::Redefine,
+            kind,
             body: buf.freeze(),
         }
     }

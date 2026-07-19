@@ -148,11 +148,25 @@ Environment variables:
 
 1. **Watch** — `javar-core` debounces `notify` events on `.java` / `.class`  
 2. **Compile** — sources go through background `javac`; `.class` files are mmap’d  
-3. **Frame** — bytecode is sent in a compact binary frame (header + payload, no extra concat on the write path)  
-4. **Redefine** — agent calls `Instrumentation.redefineClasses`  
-5. **Rollback** — previous bytecode is snapshotted; failed changes can be reverted in milliseconds  
+3. **Schema check (Rust)** — class-file field/method sets are compared; compatible vs structural  
+4. **Compatible** — agent calls `Instrumentation.redefineClasses` (method bodies only)  
+5. **Structural (shadow class)** — see below  
+6. **Rollback** — Rust `ShadowRegistry` keeps prior versions for instant revert  
 
-Structural changes (new fields/methods) that HotSwap rejects will use a custom classloader path (`StructuralClassLoader`) in a later milestone.
+### Structural hot-swap (shadow classes)
+
+The JVM forbids changing a *loaded* class’s schema. JavaR bypasses that without restarting:
+
+1. Rust detects a structural change and assigns `Original$JavaR_vN`
+2. Agent **defines a new class** with that name (always allowed) holding the new fields/methods  
+3. ByteBuddy rewrites only the **method bodies** of `Original` to call `JavaRDispatcher` (schema of `Original` unchanged → HotSwap-legal)  
+4. Live instances keep type `Original`; each gets a shadow *twin* for new state  
+
+```text
+Caller → Original.foo()  ──dispatch──▶  Original$JavaR_v2.foo()
+              │                              │
+         (frozen schema)              (new fields/methods)
+```
 
 ---
 

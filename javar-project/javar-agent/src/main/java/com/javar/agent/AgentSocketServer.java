@@ -33,6 +33,7 @@ public final class AgentSocketServer {
     private static final byte KIND_ROLLBACK = 6;
     private static final byte KIND_TELEMETRY = 7;
     private static final byte KIND_HOT_DEPLOY = 8;
+    private static final byte KIND_STRUCTURAL = 9;
 
     private final int port;
     private final ClassRedefiner redefiner;
@@ -151,7 +152,9 @@ public final class AgentSocketServer {
             case KIND_PING:
                 return encodeFrame(KIND_PONG, new byte[0]);
             case KIND_REDEFINE:
-                return handleRedefine(payload);
+                return handleRedefine(payload, false);
+            case KIND_STRUCTURAL:
+                return handleRedefine(payload, true);
             case KIND_HOT_DEPLOY:
                 // IDE nudge — core file watcher performs compile/redefine; ack only.
                 return encodeFrame(KIND_STATUS, jsonStatus("hot_deploy", "accepted"));
@@ -166,7 +169,7 @@ public final class AgentSocketServer {
         }
     }
 
-    private byte[] handleRedefine(byte[] payload) {
+    private byte[] handleRedefine(byte[] payload, boolean structuralHint) {
         try {
             if (payload.length < 4) {
                 return encodeFrame(KIND_ERROR, jsonStatus("error", "truncated redefine"));
@@ -187,10 +190,32 @@ public final class AgentSocketServer {
             byte[] bytecode = new byte[bytecodeLen];
             System.arraycopy(payload, start, bytecode, 0, bytecodeLen);
 
-            ClassRedefiner.RedefineResult result = redefiner.redefine(className, bytecode);
+            boolean structural = structuralHint
+                    || "true".equalsIgnoreCase(JsonMini.stringField(headerJson, "structural"));
+            // JSON boolean may appear without quotes — also check raw fragment.
+            if (!structural && headerJson.contains("\"structural\":true")) {
+                structural = true;
+            }
+
+            ClassRedefiner.RedefineResult result;
+            if (structural) {
+                String shadowName = JsonMini.stringField(headerJson, "shadow_name");
+                int version = JsonMini.intField(headerJson, "version");
+                if (version < 0) {
+                    version = 1;
+                }
+                if (shadowName == null || shadowName.isEmpty()) {
+                    shadowName = className + "$JavaR_v" + version;
+                }
+                result = redefiner.redefineStructural(className, shadowName, version, bytecode);
+            } else {
+                result = redefiner.redefine(className, bytecode);
+            }
+
             if (result.success) {
                 reloadCount.incrementAndGet();
-                return encodeFrame(KIND_STATUS, jsonStatus("redefined", result.message));
+                String state = structural ? "shadow" : "redefined";
+                return encodeFrame(KIND_STATUS, jsonStatus(state, result.message));
             }
             return encodeFrame(KIND_ERROR, jsonStatus("error", result.message));
         } catch (Exception e) {

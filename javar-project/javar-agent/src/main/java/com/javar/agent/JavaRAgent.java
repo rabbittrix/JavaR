@@ -2,6 +2,7 @@ package com.javar.agent;
 
 import com.javar.agent.memory.OffHeapBridge;
 import com.javar.agent.memory.OffHeapBridgeFactory;
+import com.javar.agent.shadow.ShadowClassManager;
 
 import java.lang.instrument.Instrumentation;
 import java.util.concurrent.atomic.AtomicLong;
@@ -25,6 +26,7 @@ public final class JavaRAgent {
     private static volatile Instrumentation instrumentation;
     private static volatile AgentSocketServer socketServer;
     private static volatile ClassRedefiner redefiner;
+    private static volatile ShadowClassManager shadowManager;
     private static volatile OffHeapBridge offHeap;
     private static final AtomicLong RELOAD_COUNT = new AtomicLong();
 
@@ -45,7 +47,8 @@ public final class JavaRAgent {
         instrumentation = inst;
         AgentOptions options = AgentOptions.parse(args);
 
-        redefiner = new ClassRedefiner(inst);
+        shadowManager = new ShadowClassManager(inst);
+        redefiner = new ClassRedefiner(inst, shadowManager);
         offHeap = OffHeapBridgeFactory.get();
         TelemetryReporter telemetry = new TelemetryReporter(inst, RELOAD_COUNT, offHeap);
 
@@ -81,6 +84,11 @@ public final class JavaRAgent {
             offHeap = local;
         }
         return local;
+    }
+
+    /** Structural hot-reload shadow manager. */
+    public static ShadowClassManager getShadowManager() {
+        return shadowManager;
     }
 
     /**

@@ -1,5 +1,7 @@
 package com.javar.agent;
 
+import com.javar.agent.shadow.ShadowClassManager;
+
 import java.lang.instrument.ClassDefinition;
 import java.lang.instrument.Instrumentation;
 import java.lang.instrument.UnmodifiableClassException;
@@ -9,32 +11,64 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * Applies bytecode to loaded classes via {@link Instrumentation#redefineClasses}.
- * Phase 1: method-body / compatible changes.
- * Phase 1.5+: custom classloader path for structural changes (fields/methods).
+ * Applies bytecode via {@link Instrumentation#redefineClasses}, falling back to
+ * {@link ShadowClassManager} when the JVM rejects structural changes.
  */
 public final class ClassRedefiner {
 
     private static final Logger LOG = Logger.getLogger(ClassRedefiner.class.getName());
 
     private final Instrumentation instrumentation;
+    private final ShadowClassManager shadows;
     /** Last successfully applied bytecode per binary class name. */
     private final Map<String, byte[]> lastApplied = new ConcurrentHashMap<String, byte[]>();
     /** Previous version for instant rollback. */
     private final Map<String, byte[]> previous = new ConcurrentHashMap<String, byte[]>();
 
-    public ClassRedefiner(Instrumentation instrumentation) {
+    public ClassRedefiner(Instrumentation instrumentation, ShadowClassManager shadows) {
         this.instrumentation = instrumentation;
+        this.shadows = shadows;
     }
 
     public synchronized RedefineResult redefine(String className, byte[] bytecode) {
+        return redefine(className, bytecode, false, 0, null);
+    }
+
+    public synchronized RedefineResult redefineStructural(
+            String className, String shadowName, int version, byte[] bytecode) {
+        return redefine(className, bytecode, true, version, shadowName);
+    }
+
+    private RedefineResult redefine(
+            String className,
+            byte[] bytecode,
+            boolean forceShadow,
+            int version,
+            String shadowName) {
         if (className == null || bytecode == null || bytecode.length == 0) {
             return RedefineResult.fail("invalid redefine request");
         }
 
+        byte[] prior = lastApplied.get(className);
+        if (prior != null) {
+            previous.put(className, prior);
+        }
+
+        if (forceShadow) {
+            String shadow = shadowName != null
+                    ? shadowName
+                    : className + "$JavaR_v" + Math.max(version, 1);
+            ShadowClassManager.InstallResult installed =
+                    shadows.install(className, shadow, version, bytecode);
+            if (installed.success) {
+                lastApplied.put(className, bytecode);
+                return RedefineResult.ok(installed.message);
+            }
+            return RedefineResult.fail(installed.message);
+        }
+
         Class<?> target = findLoadedClass(className);
         if (target == null) {
-            // Class not yet loaded — stash for future redefine / custom loader (Phase 2).
             lastApplied.put(className, bytecode);
             LOG.info("Class not loaded yet; cached bytecode for " + className);
             return RedefineResult.ok("cached (not loaded): " + className);
@@ -42,11 +76,6 @@ public final class ClassRedefiner {
 
         if (!instrumentation.isModifiableClass(target)) {
             return RedefineResult.fail("class not modifiable: " + className);
-        }
-
-        byte[] prior = lastApplied.get(className);
-        if (prior != null) {
-            previous.put(className, prior);
         }
 
         try {
@@ -59,10 +88,17 @@ public final class ClassRedefiner {
         } catch (UnmodifiableClassException e) {
             return RedefineResult.fail("unmodifiable: " + className);
         } catch (UnsupportedOperationException e) {
-            // Typical for structural changes under HotSwap — escalate to custom loader later.
-            LOG.log(Level.WARNING, "Structural change rejected by JVM for " + className, e);
-            return RedefineResult.fail("structural change unsupported (use JavaR classloader): "
-                    + e.getMessage());
+            LOG.log(Level.WARNING,
+                    "HotSwap rejected structural change for " + className
+                            + " — installing shadow class", e);
+            String shadow = className + "$JavaR_v" + System.currentTimeMillis();
+            ShadowClassManager.InstallResult installed =
+                    shadows.install(className, shadow, 1, bytecode);
+            if (installed.success) {
+                lastApplied.put(className, bytecode);
+                return RedefineResult.ok(installed.message);
+            }
+            return RedefineResult.fail("structural fallback failed: " + installed.message);
         } catch (Exception e) {
             LOG.log(Level.SEVERE, "redefine failed for " + className, e);
             return RedefineResult.fail(e.getMessage());

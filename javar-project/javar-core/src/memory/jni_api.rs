@@ -102,12 +102,12 @@ pub extern "system" fn Java_com_javar_agent_memory_JniOffHeapBridge_nativeAsDire
 
 /// `boolean nativeWrite(long id, long offset, byte[] data)`
 #[no_mangle]
-pub extern "system" fn Java_com_javar_agent_memory_JniOffHeapBridge_nativeWrite(
-    env: JNIEnv,
-    _class: JClass,
+pub extern "system" fn Java_com_javar_agent_memory_JniOffHeapBridge_nativeWrite<'local>(
+    env: JNIEnv<'local>,
+   _class: JClass<'local>,
     id: jlong,
     offset: jlong,
-    data: JByteArray,
+    data: JByteArray<'local>,
 ) -> jboolean {
     if offset < 0 {
         return JNI_FALSE;
