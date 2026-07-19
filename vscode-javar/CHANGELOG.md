@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.4
+
+- Full CLI command reference in Marketplace README (`init`, `run` options, `status`, `dashboard` / `tui`)
+- Clarify Cockpit maps to `javar run --watch-only` vs smart `javar run` for the app JVM
+
 ## 0.1.3
 
 - Cockpit auto-start uses `javar run --watch-only` (sidecar only; app launch is via smart CLI)

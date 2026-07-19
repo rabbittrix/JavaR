@@ -15,5 +15,6 @@
 </p>
 
 <p align="center">
-  <b>Hot-reload structurally. Keep memory off-heap. Never restart the JVM.</b>
+  <b>Hot-reload structurally. Keep memory off-heap. Never restart the JVM.</b><br/>
+  <code>javar run</code> · <code>javar dashboard</code> · <code>javar status</code>
 </p>
