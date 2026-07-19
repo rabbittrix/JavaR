@@ -11,7 +11,7 @@
 ```
 
 <p align="center">
-  <img src="docs/assets/logo.svg" alt="JavaR" width="180"/>
+  <img src="./docs/assets/logo.png" alt="JavaR" width="180" />
 </p>
 
 <p align="center">
