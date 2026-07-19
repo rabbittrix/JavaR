@@ -13,3 +13,24 @@
 2026.07.19 16:25:33 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\AgentSocketServer.java. Using fallback presentation compiler.
 2026.07.19 16:25:36 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\TelemetryReporter.java. Using fallback presentation compiler.
 2026.07.19 16:25:37 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\StructuralClassLoader.java. Using fallback presentation compiler.
+2026.07.19 16:36:37 WARN  no build target for: G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\memory\OffHeapBridge.java
+2026.07.19 16:36:40 WARN  no build target for: G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\memory\NativeLibraryLoader.java
+2026.07.19 16:36:43 WARN  no build target for: G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\memory\JniOffHeapBridge.java
+2026.07.19 16:36:48 WARN  no build target for: G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\memory\OffHeapBridgeFactory.java
+2026.07.19 16:36:50 WARN  no build target for: G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\memory\NoopOffHeapBridge.java
+2026.07.19 16:37:08 WARN  no build target for: G:\Project_JavaR\javar-project\javar-agent\src\main\java22\com\javar\agent\memory\PanamaOffHeapBridge.java
+2026.07.19 16:37:20 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java22\com\javar\agent\memory\PanamaOffHeapBridge.java. Using fallback presentation compiler.
+2026.07.19 16:37:20 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java22\com\javar\agent\memory\PanamaOffHeapBridge.java. Using fallback presentation compiler.
+2026.07.19 16:37:31 WARN  no build target for: G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\JavaRAgent.java
+2026.07.19 16:37:34 WARN  no build target for: G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\TelemetryReporter.java
+2026.07.19 16:37:40 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java22\com\javar\agent\memory\PanamaOffHeapBridge.java. Using fallback presentation compiler.
+2026.07.19 16:38:03 WARN  no build target for: G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\memory\package-info.java
+2026.07.19 16:39:37 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\memory\OffHeapBridge.java. Using fallback presentation compiler.
+2026.07.19 16:39:40 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\memory\NativeLibraryLoader.java. Using fallback presentation compiler.
+2026.07.19 16:39:43 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\memory\JniOffHeapBridge.java. Using fallback presentation compiler.
+2026.07.19 16:39:48 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\memory\OffHeapBridgeFactory.java. Using fallback presentation compiler.
+2026.07.19 16:39:50 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\memory\NoopOffHeapBridge.java. Using fallback presentation compiler.
+2026.07.19 16:40:08 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java22\com\javar\agent\memory\PanamaOffHeapBridge.java. Using fallback presentation compiler.
+2026.07.19 16:40:31 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\JavaRAgent.java. Using fallback presentation compiler.
+2026.07.19 16:40:34 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\TelemetryReporter.java. Using fallback presentation compiler.
+2026.07.19 16:41:03 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\memory\package-info.java. Using fallback presentation compiler.

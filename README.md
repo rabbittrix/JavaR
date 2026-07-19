@@ -17,7 +17,7 @@ JavaR is a hybrid system where a **Rust core** runs as a sidecar/agent beside th
 A modern, “addictive” mark: a stylized **R** fused with a Duke-inspired silhouette, neon orange → rust-red, on a dark stage — suggesting speed, hot metal, and the Java ↔ Rust bond.
 
 <p align="center">
-  <img src="docs/assets/javar-logo.svg" alt="JavaR logo" width="220" />
+  <img src="javar-project/docs/assets/javar-logo.svg" alt="JavaR logo" width="220" />
 </p>
 
 ---
@@ -54,12 +54,32 @@ A modern, “addictive” mark: a stylized **R** fused with a Duke-inspired silh
 
 ---
 
-## Installation
+## Raise the project
+
+### Prerequisites
+
+- Rust (`rustup`)
+- JDK 8+ (JDK 22+ recommended for Project Panama)
+- Maven 3.8+ (for `javar-agent`)
+
+### From source (this repo)
+
+```powershell
+cd javar-project
+
+cargo build --release -p javar-cli -p javar-core
+cd javar-agent
+mvn -DskipTests package
+cd ..
+
+# Optional: install CLI onto PATH
+cargo install --path javar-cli
+```
 
 ### One-liner (Unix / macOS)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/rabbittrix/javar/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/rabbittrix/javar/main/javar-project/scripts/install.sh | sh
 ```
 
 Then add `~/.javar/bin` to your `PATH`.
@@ -67,38 +87,24 @@ Then add `~/.javar/bin` to your `PATH`.
 ### Windows (PowerShell)
 
 ```powershell
-irm https://raw.githubusercontent.com/rabbittrix/javar/main/scripts/install.ps1 | iex
-# or from a local clone:
-.\scripts\install.ps1
-```
-
-### From source
-
-```bash
-# Prerequisites: Rust (rustup), JDK 8+, Maven 3.8+
-git clone https://github.com/rabbittrix/javar.git
-cd javar   # or javar-project
-
-cargo build --release -p javar-cli -p javar-core
-cd javar-agent && mvn -DskipTests package && cd ..
-
-# Optional: install CLI onto PATH
-cargo install --path javar-cli
+# from repo root:
+.\javar-project\scripts\install.ps1
 ```
 
 ---
 
 ## Quick start
 
-```bash
+```powershell
+cd javar-project
+
 # 1. Scaffold
-javar init my-app
-cd my-app
+javar init ..\demo-app
+cd ..\demo-app
 
 # 2. Start your JVM with the agent (flags printed by `javar run --flags-only`)
 javar run --flags-only
-# export JAVA_TOOL_OPTIONS='-javaagent:/path/to/javar-agent-0.1.0.jar=port=19222'
-# java $JAVA_TOOL_OPTIONS -cp target/classes com.example.HelloJavaR
+# java -javaagent:...\javar-agent-0.1.0.jar=port=19222 -cp ... com.example.HelloJavaR
 
 # 3. In another terminal — start the Rust sidecar
 javar run
@@ -108,6 +114,13 @@ javar status
 ```
 
 Edit a `.java` file, save, and JavaR compiles + pushes bytecode to the agent.
+
+Native library (off-heap Panama/JNI), when needed:
+
+```powershell
+# After: cargo build -p javar-core  (from javar-project/)
+$env:JAVAR_NATIVE_PATH = "$PWD\target\release\javar_core.dll"
+```
 
 ---
 
@@ -127,6 +140,7 @@ Environment variables:
 |----------|---------|---------|
 | `JAVAR_AGENT_ADDR` | `127.0.0.1:19222` | Core → agent address |
 | `JAVAR_AGENT_PORT` | `19222` | Agent listen port |
+| `JAVAR_NATIVE_PATH` | — | Absolute path to `javar_core` shared library |
 
 ---
 
@@ -144,8 +158,8 @@ Structural changes (new fields/methods) that HotSwap rejects will use a custom c
 
 ## VS Code extension
 
-```bash
-cd javar-vscode
+```powershell
+cd javar-project\javar-vscode
 npm install
 npm run compile
 # F5 in VS Code, or: npx vsce package
@@ -162,21 +176,22 @@ Features:
 
 ## Workspace layout
 
-```
-javar-project/
-├── Cargo.toml                 # Rust workspace
-├── javar-core/                # Rust sidecar (watcher, bridge, protocol, memory)
-├── javar-cli/                 # `javar` binary
-├── javar-agent/               # Java Instrumentation agent (Maven)
-├── javar-vscode/              # VS Code extension
-├── scripts/install.sh         # curl | sh installer
-├── scripts/install.ps1        # Windows installer
-└── docs/assets/javar-logo.svg
+```text
+Project_JavaR/                 ← repo root (this README)
+├── README.md
+└── javar-project/             ← Cargo workspace + agent + VS Code ext
+    ├── Cargo.toml
+    ├── javar-core/            ← Rust sidecar (watcher, bridge, protocol, memory)
+    ├── javar-cli/             ← `javar` binary
+    ├── javar-agent/           ← Java Instrumentation agent (Maven)
+    ├── javar-vscode/          ← VS Code extension
+    ├── scripts/               ← install.sh / install.ps1
+    └── docs/assets/           ← logo SVG
 ```
 
 ### Off-heap zero-copy bridge (Panama / JNI)
 
-Rust owns off-heap regions (`javar_mem_*` C ABI in `javar-core/include/javar_mem.h`). The JVM attaches without copying:
+Rust owns off-heap regions (`javar_mem_*` C ABI in `javar-project/javar-core/include/javar_mem.h`). The JVM attaches without copying:
 
 | JDK | Backend | Mechanism |
 |-----|---------|-----------|
