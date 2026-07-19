@@ -1,5 +1,6 @@
 package com.javar.agent.memory;
 
+import java.lang.foreign.AddressLayout;
 import java.lang.foreign.Arena;
 import java.lang.foreign.FunctionDescriptor;
 import java.lang.foreign.Linker;
@@ -21,7 +22,8 @@ public final class PanamaOffHeapBridge implements OffHeapBridge {
 
     private static final ValueLayout.OfLong C_LONG = ValueLayout.JAVA_LONG;
     private static final ValueLayout.OfInt C_INT = ValueLayout.JAVA_INT;
-    private static final ValueLayout.OfAddress C_POINTER = ValueLayout.ADDRESS;
+    /** Java 22+: {@code ValueLayout.OfAddress} was replaced by {@link AddressLayout}. */
+    private static final AddressLayout C_POINTER = ValueLayout.ADDRESS;
 
     private final Arena arena;
     private final MethodHandle alloc;

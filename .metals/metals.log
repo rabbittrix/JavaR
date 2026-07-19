@@ -61,3 +61,60 @@ INFO: Unsupported notification method: $/setTrace
 2026.07.19 17:10:23 WARN  no build target for: G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\managed\JavaRManaged.java
 2026.07.19 17:10:24 WARN  no build target for: G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\managed\FieldLayout.java
 2026.07.19 17:10:43 WARN  no build target for: G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\managed\JavaRManagedRuntime.java
+2026.07.19 17:11:43 WARN  no build target for: G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\managed\JavaRManagedRuntime.java
+2026.07.19 17:11:43 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\managed\JavaRManagedRuntime.java. Using fallback presentation compiler.
+2026.07.19 17:11:46 WARN  no build target for: G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\managed\ManagedClassTransformer.java
+2026.07.19 17:11:46 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\managed\JavaRManagedRuntime.java. Using fallback presentation compiler.
+2026.07.19 17:11:46 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\managed\JavaRManagedRuntime.java. Using fallback presentation compiler.
+2026.07.19 17:11:59 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\managed\JavaRManagedRuntime.java. Using fallback presentation compiler.
+2026.07.19 17:11:59 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\managed\JavaRManagedRuntime.java. Using fallback presentation compiler.
+2026.07.19 17:11:59 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\managed\JavaRManagedRuntime.java. Using fallback presentation compiler.
+2026.07.19 17:12:00 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\managed\JavaRManagedRuntime.java. Using fallback presentation compiler.
+2026.07.19 17:12:00 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\managed\JavaRManagedRuntime.java. Using fallback presentation compiler.
+2026.07.19 17:12:00 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\managed\JavaRManagedRuntime.java. Using fallback presentation compiler.
+2026.07.19 17:12:01 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\managed\JavaRManagedRuntime.java. Using fallback presentation compiler.
+2026.07.19 17:12:01 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\managed\JavaRManagedRuntime.java. Using fallback presentation compiler.
+2026.07.19 17:12:01 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\managed\JavaRManagedRuntime.java. Using fallback presentation compiler.
+2026.07.19 17:12:07 WARN  no build target for: G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\managed\ManagedClassTransformer.java
+2026.07.19 17:12:07 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\managed\ManagedClassTransformer.java. Using fallback presentation compiler.
+2026.07.19 17:12:12 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\managed\ManagedClassTransformer.java. Using fallback presentation compiler.
+2026.07.19 17:12:13 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\managed\ManagedClassTransformer.java. Using fallback presentation compiler.
+2026.07.19 17:12:14 WARN  no build target for: G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\JavaRAgent.java
+2026.07.19 17:12:14 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\managed\ManagedClassTransformer.java. Using fallback presentation compiler.
+2026.07.19 17:12:18 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\JavaRAgent.java. Using fallback presentation compiler.
+2026.07.19 17:12:18 WARN  no build target for: G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\TelemetryReporter.java
+2026.07.19 17:12:18 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\managed\ManagedClassTransformer.java. Using fallback presentation compiler.
+2026.07.19 17:12:20 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\TelemetryReporter.java. Using fallback presentation compiler.
+2026.07.19 17:12:20 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\TelemetryReporter.java. Using fallback presentation compiler.
+2026.07.19 17:12:43 WARN  no build target for: G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\TelemetryReporter.java
+2026.07.19 17:12:43 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\managed\ManagedClassTransformer.java. Using fallback presentation compiler.
+2026.07.19 17:12:43 WARN  no build target for: G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\managed\package-info.java
+2026.07.19 17:12:43 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\managed\ManagedClassTransformer.java. Using fallback presentation compiler.
+2026.07.19 17:13:03 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\managed\ManagedClassTransformer.java. Using fallback presentation compiler.
+2026.07.19 17:13:03 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\managed\ManagedClassTransformer.java. Using fallback presentation compiler.
+2026.07.19 17:13:03 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\managed\ManagedClassTransformer.java. Using fallback presentation compiler.
+2026.07.19 17:13:03 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\managed\ManagedClassTransformer.java. Using fallback presentation compiler.
+2026.07.19 17:13:23 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\managed\JavaRManaged.java. Using fallback presentation compiler.
+2026.07.19 17:13:24 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\managed\FieldLayout.java. Using fallback presentation compiler.
+2026.07.19 17:13:43 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\managed\JavaRManagedRuntime.java. Using fallback presentation compiler.
+2026.07.19 17:13:53 WARN  no build target for: G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\managed\JavaRManagedRuntime.java
+2026.07.19 17:13:53 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\managed\ManagedClassTransformer.java. Using fallback presentation compiler.
+2026.07.19 17:13:59 WARN  no build target for: G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\managed\ManagedClassTransformer.java
+2026.07.19 17:13:59 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\managed\ManagedClassTransformer.java. Using fallback presentation compiler.
+2026.07.19 17:14:05 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\managed\ManagedClassTransformer.java. Using fallback presentation compiler.
+2026.07.19 17:14:05 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\managed\ManagedClassTransformer.java. Using fallback presentation compiler.
+2026.07.19 17:14:18 WARN  no build target for: G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\managed\JavaRManagedRuntime.java
+2026.07.19 17:14:18 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\managed\JavaRManagedRuntime.java. Using fallback presentation compiler.
+2026.07.19 17:14:20 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\managed\JavaRManagedRuntime.java. Using fallback presentation compiler.
+2026.07.19 17:14:20 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\managed\JavaRManagedRuntime.java. Using fallback presentation compiler.
+2026.07.19 17:14:28 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\managed\JavaRManagedRuntime.java. Using fallback presentation compiler.
+2026.07.19 17:14:28 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\managed\JavaRManagedRuntime.java. Using fallback presentation compiler.
+2026.07.19 17:14:29 WARN  no build target for: G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\managed\JavaRManagedRuntime.java
+2026.07.19 17:14:29 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\managed\JavaRManagedRuntime.java. Using fallback presentation compiler.
+2026.07.19 17:14:46 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\managed\ManagedClassTransformer.java. Using fallback presentation compiler.
+2026.07.19 17:15:14 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\JavaRAgent.java. Using fallback presentation compiler.
+2026.07.19 17:15:43 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\TelemetryReporter.java. Using fallback presentation compiler.
+2026.07.19 17:15:43 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\managed\package-info.java. Using fallback presentation compiler.
+2026.07.19 17:16:53 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\managed\JavaRManagedRuntime.java. Using fallback presentation compiler.
+2026.07.19 17:19:09 WARN  no build target for: G:\Project_JavaR\javar-project\javar-agent\src\main\java22\com\javar\agent\memory\PanamaOffHeapBridge.java
+2026.07.19 17:19:10 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java22\com\javar\agent\memory\PanamaOffHeapBridge.java. Using fallback presentation compiler.
