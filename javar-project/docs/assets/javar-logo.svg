@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="JavaR logo">
+  <title>JavaR</title>
+  <defs>
+    <linearGradient id="neonOrange" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FF8A00"/>
+      <stop offset="45%" stop-color="#FF6A00"/>
+      <stop offset="100%" stop-color="#B7410E"/>
+    </linearGradient>
+    <linearGradient id="rustRed" x1="100%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#E4572E"/>
+      <stop offset="100%" stop-color="#8B2500"/>
+    </linearGradient>
+    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <radialGradient id="bg" cx="35%" cy="30%" r="75%">
+      <stop offset="0%" stop-color="#2A1810"/>
+      <stop offset="100%" stop-color="#0D0907"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Dark stage -->
+  <rect width="512" height="512" rx="96" fill="url(#bg)"/>
+
+  <!-- Soft orbital ring (hot-reload cycle) -->
+  <circle cx="256" cy="256" r="188" fill="none" stroke="#FF6A00" stroke-opacity="0.25" stroke-width="6"
+          stroke-dasharray="28 18"/>
+  <circle cx="256" cy="256" r="188" fill="none" stroke="#B7410E" stroke-opacity="0.35" stroke-width="2"/>
+
+  <!-- Stylized Duke-inspired silhouette fused into the R counter -->
+  <g transform="translate(292 148)" fill="url(#rustRed)" opacity="0.92" filter="url(#glow)">
+    <!-- Head -->
+    <ellipse cx="48" cy="36" rx="34" ry="32"/>
+    <!-- Crest spines -->
+    <path d="M20 8 C18 -8 40 -14 48 2 C56 -14 78 -8 76 8 C70 0 58 2 48 10 C38 2 26 0 20 8Z"/>
+    <!-- Body suggestion -->
+    <path d="M22 62 C18 110 28 150 48 168 C68 150 78 110 74 62 C64 72 32 72 22 62Z"/>
+  </g>
+
+  <!-- Bold neon "R" -->
+  <g filter="url(#glow)">
+    <path fill="url(#neonOrange)" d="
+      M110 400
+      V120
+      h120
+      c78 0 128 42 128 112
+      0 52 -28 90 -78 106
+      l86 62
+      h-78
+      l-72 -54
+      H178
+      V400
+      H110
+      Z
+      M178 286
+      h48
+      c34 0 56 -18 56 -48
+      s-22 -48 -56 -48
+      H178
+      V286
+      Z"/>
+  </g>
+
+  <!-- Spark (instant rollback / hot path) -->
+  <circle cx="400" cy="120" r="14" fill="#FF8A00"/>
+  <circle cx="400" cy="120" r="28" fill="none" stroke="#FF8A00" stroke-opacity="0.45" stroke-width="3"/>
+</svg>

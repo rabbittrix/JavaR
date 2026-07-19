@@ -1,0 +1,26 @@
+# Rust
+/target/
+**/*.rs.bk
+
+# Java / Maven
+javar-agent/target/
+**/.classpath
+**/.project
+**/.settings/
+
+# Node / VS Code extension
+javar-vscode/node_modules/
+javar-vscode/out/
+*.vsix
+
+# IDE / OS
+.idea/
+*.iml
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Env / local
+.env
+*.log
+javar.toml.local

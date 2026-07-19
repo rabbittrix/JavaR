@@ -1,0 +1,23 @@
+[package]
+name = "javar-cli"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "JavaR CLI — init, run, and status for the hot-reload engine"
+
+[[bin]]
+name = "javar"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+bytes.workspace = true
+clap.workspace = true
+javar-core = { path = "../javar-core" }
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+which.workspace = true

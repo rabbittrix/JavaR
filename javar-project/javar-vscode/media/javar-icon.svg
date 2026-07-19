@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="JavaR">
+  <defs>
+    <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FF6A00"/>
+      <stop offset="100%" stop-color="#B7410E"/>
+    </linearGradient>
+  </defs>
+  <rect width="128" height="128" rx="28" fill="#1A120C"/>
+  <path fill="url(#g)" d="M36 96V32h28c18 0 30 10 30 26 0 12-7 21-18 25l22 13h-18l-18-11H52v11H36zm16-27h12c8 0 13-4 13-11s-5-11-13-11H52v22z"/>
+  <circle cx="96" cy="36" r="8" fill="#FF6A00" opacity="0.9"/>
+</svg>

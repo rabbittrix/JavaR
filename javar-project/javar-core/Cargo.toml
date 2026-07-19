@@ -1,0 +1,44 @@
+[package]
+name = "javar-core"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "JavaR high-performance sidecar: file watching, hot-reload orchestration, and off-heap memory"
+
+[lib]
+name = "javar_core"
+crate-type = ["cdylib", "rlib"]
+
+[[bin]]
+name = "javar-core"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+async-trait.workspace = true
+bytes.workspace = true
+crossbeam-channel.workspace = true
+jni.workspace = true
+parking_lot = "0.12"
+dashmap = "5"
+memmap2 = "0.9"
+notify.workspace = true
+notify-debouncer-mini.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+walkdir.workspace = true
+which.workspace = true
+
+[features]
+default = ["socket-bridge", "offheap"]
+# JNI bridge for in-process agent communication (registers JVM in JNI_OnLoad)
+jni-bridge = []
+# Local Unix/TCP socket bridge (default, IDE-agnostic)
+socket-bridge = []
+# Off-heap C ABI + JNI DirectByteBuffer exports (Panama consumes the C ABI)
+offheap = []

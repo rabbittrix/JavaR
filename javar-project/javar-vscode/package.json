@@ -1,0 +1,103 @@
+{
+  "name": "javar",
+  "displayName": "JavaR",
+  "description": "Hot-reload and memory telemetry for Java, powered by the JavaR Rust core",
+  "version": "0.1.0",
+  "publisher": "rabbittrix",
+  "author": {
+    "name": "Roberto de Souza",
+    "email": "rabbittrix@hotmail.com"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other",
+    "Debuggers"
+  ],
+  "activationEvents": [
+    "onLanguage:java",
+    "onCommand:javar.hotDeploy",
+    "onCommand:javar.connect",
+    "workspaceContains:javar.toml"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "javar.hotDeploy",
+        "title": "JavaR: Hot Deploy",
+        "icon": "$(flame)"
+      },
+      {
+        "command": "javar.connect",
+        "title": "JavaR: Connect to Core"
+      },
+      {
+        "command": "javar.disconnect",
+        "title": "JavaR: Disconnect"
+      },
+      {
+        "command": "javar.showTelemetry",
+        "title": "JavaR: Show Memory Telemetry"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "javar.hotDeploy",
+          "when": "resourceExtname == .java || resourceExtname == .class",
+          "group": "navigation"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "JavaR",
+      "properties": {
+        "javar.coreHost": {
+          "type": "string",
+          "default": "127.0.0.1",
+          "description": "Host where javar-core / agent listens"
+        },
+        "javar.corePort": {
+          "type": "number",
+          "default": 19222,
+          "description": "TCP port for the JavaR agent socket"
+        },
+        "javar.telemetryIntervalMs": {
+          "type": "number",
+          "default": 2000,
+          "description": "How often to refresh heap vs managed-memory telemetry"
+        }
+      }
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "javar",
+          "title": "JavaR",
+          "icon": "media/javar-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "javar": [
+        {
+          "id": "javar.telemetry",
+          "name": "Memory Telemetry"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.3.3"
+  }
+}
