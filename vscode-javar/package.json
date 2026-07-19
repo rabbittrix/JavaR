@@ -3,7 +3,7 @@
   "displayName": "JavaR Cockpit",
   "description": "Zero-Restart Java — hot-reload, off-heap telemetry, and javar CLI integration",
   "version": "0.1.0",
-  "publisher": "rabbittrix",
+  "publisher": "JRSF",
   "author": {
     "name": "Roberto de Souza",
     "email": "rabbittrix@hotmail.com"
