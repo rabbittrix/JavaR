@@ -33,7 +33,10 @@ jobs:
             libname: javar_core.dll
             binname: javar.exe
             archive: windows-x86_64
-          - os: macos-13
+          # Both Mac targets run on macos-14 (Apple Silicon).
+          # macos-13 Intel runners are deprecated / often never pick up jobs.
+          # x86_64-apple-darwin is cross-compiled from arm64 with the Rust target.
+          - os: macos-14
             target: x86_64-apple-darwin
             libname: libjavar_core.dylib
             binname: javar

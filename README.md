@@ -243,12 +243,12 @@ Run with `-javaagent:javar-agent.jar`. Telemetry exposes `javar_managed`, `gc_sa
 
 GitHub Actions (`.github/workflows/build.yml`) builds:
 
-| Target | Archive |
-|--------|---------|
-| Linux x86_64 | `javar-linux-x86_64.zip` |
-| Windows x86_64 | `javar-windows-x86_64.zip` |
-| macOS Intel | `javar-macos-x86_64.zip` |
-| macOS Apple Silicon | `javar-macos-aarch64.zip` |
+| Target | Archive | Runner |
+|--------|---------|--------|
+| Linux x86_64 | `javar-linux-x86_64.zip` | `ubuntu-latest` |
+| Windows x86_64 | `javar-windows-x86_64.zip` | `windows-latest` |
+| macOS Intel | `javar-macos-x86_64.zip` | `macos-14` (cross-compile) |
+| macOS Apple Silicon | `javar-macos-aarch64.zip` | `macos-14` |
 
 Each zip contains `bin/javar`, `lib/*javar_core*`, and `agent/javar-agent.jar`. Tag `v*` to publish a GitHub Release.
 
