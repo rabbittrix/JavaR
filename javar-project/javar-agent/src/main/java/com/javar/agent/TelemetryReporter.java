@@ -45,6 +45,7 @@ public final class TelemetryReporter {
         long loaded = instrumentation != null ? instrumentation.getAllLoadedClasses().length : 0;
         long managed = resolveManagedBytes();
         String backend = offHeap != null ? offHeap.backend() : "none";
+        String project = resolveProjectName();
         String json = "{"
                 + "\"java_heap_used\":" + heap.getUsed() + ","
                 + "\"java_heap_max\":" + heap.getMax() + ","
@@ -53,9 +54,43 @@ public final class TelemetryReporter {
                 + "\"managed_regions\":" + JavaRManagedRuntime.regionCount() + ","
                 + "\"reload_count\":" + reloadCount + ","
                 + "\"loaded_classes\":" + loaded + ","
-                + "\"offheap_backend\":\"" + backend + "\""
+                + "\"offheap_backend\":\"" + escapeJson(backend) + "\","
+                + "\"project_name\":\"" + escapeJson(project) + "\""
                 + "}";
         return json.getBytes(StandardCharsets.UTF_8);
+    }
+
+    private static String resolveProjectName() {
+        String prop = System.getProperty("javar.project.name");
+        if (prop != null && !prop.isEmpty()) {
+            return prop;
+        }
+        String env = System.getenv("JAVAR_PROJECT_NAME");
+        if (env != null && !env.isEmpty()) {
+            return env;
+        }
+        // Fall back to main class simple name when available.
+        for (StackTraceElement el : Thread.currentThread().getStackTrace()) {
+            // ignore
+        }
+        String cmd = System.getProperty("sun.java.command", "");
+        if (!cmd.isEmpty()) {
+            String first = cmd.split("\\s+")[0];
+            if (first.endsWith(".jar")) {
+                int slash = Math.max(first.lastIndexOf('/'), first.lastIndexOf('\\'));
+                return slash >= 0 ? first.substring(slash + 1) : first;
+            }
+            int dot = first.lastIndexOf('.');
+            return dot >= 0 ? first.substring(dot + 1) : first;
+        }
+        return "java-app";
+    }
+
+    private static String escapeJson(String s) {
+        if (s == null) {
+            return "";
+        }
+        return s.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 
     private long resolveManagedBytes() {

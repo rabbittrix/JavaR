@@ -2,7 +2,7 @@
   "name": "javar",
   "displayName": "JavaR Cockpit",
   "description": "Zero-Restart Java — hot-reload, off-heap telemetry, and javar CLI integration",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "publisher": "JRSF",
   "author": {
     "name": "Roberto de Souza",
@@ -22,8 +22,12 @@
   "activationEvents": [
     "onLanguage:java",
     "workspaceContains:javar.toml",
+    "workspaceContains:pom.xml",
+    "workspaceContains:build.gradle",
+    "workspaceContains:build.gradle.kts",
     "onCommand:javar.forceResync",
-    "onCommand:javar.startCli"
+    "onCommand:javar.startCli",
+    "onCommand:javar.installCli"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -44,6 +48,10 @@
       {
         "command": "javar.connect",
         "title": "JavaR: Connect Agent"
+      },
+      {
+        "command": "javar.installCli",
+        "title": "JavaR: Install / Repair CLI"
       }
     ],
     "menus": {
@@ -75,6 +83,11 @@
           "type": "boolean",
           "default": true,
           "description": "Auto-start javar run --watch-only when opening a JavaR project"
+        },
+        "javar.autoInstallCli": {
+          "type": "boolean",
+          "default": true,
+          "description": "Offer to install the JavaR CLI automatically when missing"
         }
       }
     },

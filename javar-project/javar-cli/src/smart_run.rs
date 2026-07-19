@@ -292,17 +292,143 @@ fn java_path_to_fqcn(src_root: &Path, file: &Path) -> Option<String> {
 }
 
 fn read_main_class_from_pom(root: &Path) -> Option<String> {
-    let pom = root.join("pom.xml");
-    let text = fs::read_to_string(pom).ok()?;
-    // <mainClass>com.example.App</mainClass>
-    let key = "<mainClass>";
-    let start = text.find(key)? + key.len();
-    let end = text[start..].find("</mainClass>")? + start;
-    let name = text[start..end].trim();
-    if name.is_empty() || name.contains('<') {
+    let pom = fs::read_to_string(root.join("pom.xml")).ok()?;
+    // Prefer Spring Boot start-class, then maven-jar mainClass.
+    for key in ["<start-class>", "<mainClass>"] {
+        if let Some(start) = pom.find(key) {
+            let rest = &pom[start + key.len()..];
+            let close = key.replacen('<', "</", 1);
+            if let Some(end) = rest.find(&close) {
+                let name = rest[..end].trim();
+                if !name.is_empty() && !name.contains('<') {
+                    return Some(name.to_string());
+                }
+            }
+        }
+    }
+    None
+}
+
+/// True when `pom.xml` looks like a Spring Boot application.
+pub fn is_spring_boot(root: &Path) -> bool {
+    let Ok(pom) = fs::read_to_string(root.join("pom.xml")) else {
+        return false;
+    };
+    let lower = pom.to_ascii_lowercase();
+    lower.contains("spring-boot")
+        || lower.contains("springframework.boot")
+        || lower.contains("spring-boot-starter")
+}
+
+/// Display name for dashboards: Maven `artifactId`, else directory name.
+pub fn project_display_name(root: &Path) -> String {
+    if let Ok(pom) = fs::read_to_string(root.join("pom.xml")) {
+        if let Some(name) = xml_tag_text(&pom, "artifactId") {
+            if !name.contains('$') && !name.is_empty() {
+                return name;
+            }
+        }
+        if let Some(name) = xml_tag_text(&pom, "name") {
+            if !name.is_empty() {
+                return name;
+            }
+        }
+    }
+    root.file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("java-app")
+        .to_string()
+}
+
+fn xml_tag_text(xml: &str, tag: &str) -> Option<String> {
+    let open = format!("<{tag}>");
+    let close = format!("</{tag}>");
+    let start = xml.find(&open)? + open.len();
+    let end = xml[start..].find(&close)? + start;
+    let v = xml[start..end].trim();
+    if v.is_empty() || v.contains('<') {
+        None
+    } else {
+        Some(v.to_string())
+    }
+}
+
+/// Locate a Spring Boot executable jar under `target/` (excludes original/sources).
+pub fn find_spring_boot_jar(root: &Path) -> Option<PathBuf> {
+    let target = root.join("target");
+    if !target.is_dir() {
         return None;
     }
-    Some(name.to_string())
+    let mut jars: Vec<(u64, PathBuf)> = Vec::new();
+    let rd = fs::read_dir(&target).ok()?;
+    for e in rd.flatten() {
+        let p = e.path();
+        let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
+        let lower = name.to_ascii_lowercase();
+        if !lower.ends_with(".jar") {
+            continue;
+        }
+        if lower.contains("sources")
+            || lower.contains("javadoc")
+            || lower.starts_with("original-")
+            || lower.contains("-tests")
+        {
+            continue;
+        }
+        let len = fs::metadata(&p).map(|m| m.len()).unwrap_or(0);
+        // Boot fat jars are typically > 1MB; plain jars can be small.
+        if len < 50_000 {
+            continue;
+        }
+        jars.push((len, p));
+    }
+    jars.sort_by(|a, b| b.0.cmp(&a.0));
+    jars.into_iter().map(|(_, p)| p).next()
+}
+
+/// Build a runtime classpath via `dependency:build-classpath` (Spring Boot / Maven apps).
+pub fn maven_runtime_classpath(root: &Path) -> Option<String> {
+    let out_file = root.join("target/javar-classpath.txt");
+    let _ = fs::create_dir_all(root.join("target"));
+    let mvn = crate::maven::resolve_mvn(root).ok()?;
+    let java_home = crate::maven::resolve_java_home(crate::maven::preferred_java_major(root)).ok();
+
+    let mut cmd = if cfg!(windows) {
+        let mut c = std::process::Command::new("cmd");
+        c.args([
+            "/C",
+            &mvn.to_string_lossy(),
+            "-q",
+            "-DincludeScope=runtime",
+            "dependency:build-classpath",
+            &format!("-Dmdep.outputFile={}", out_file.display()),
+        ]);
+        c
+    } else {
+        let mut c = std::process::Command::new(&mvn);
+        c.args([
+            "-q",
+            "-DincludeScope=runtime",
+            "dependency:build-classpath",
+            &format!("-Dmdep.outputFile={}", out_file.display()),
+        ]);
+        c
+    };
+    cmd.current_dir(root);
+    if let Some(jh) = java_home {
+        cmd.env("JAVA_HOME", jh);
+    }
+    let status = cmd.status().ok()?;
+    if !status.success() {
+        return None;
+    }
+    let cp = fs::read_to_string(&out_file).ok()?;
+    let cp = cp.trim();
+    if cp.is_empty() {
+        None
+    } else {
+        Some(cp.to_string())
+    }
 }
 
 /// True if `args` already set a classpath (`-cp` / `-classpath` / `--class-path`).
@@ -363,17 +489,41 @@ pub fn build_java_launch_args(
 ) -> Result<Vec<String>> {
     let mut out = Vec::new();
 
+    // Panama / FFM (Java 22+): allow native library lookups without restricted warnings.
+    if java_major().is_some_and(|m| m >= 22) {
+        out.push("--enable-native-access=ALL-UNNAMED".into());
+    }
+
     if let Some(native) = native {
         let abs = native
             .canonicalize()
             .unwrap_or_else(|_| native.to_path_buf());
-        out.push(format!("-Djavar.native.path={}", abs.display()));
-        if let Some(dir) = abs.parent() {
+        // Strip Windows `\\?\` — java properties and library paths dislike it.
+        let abs_s = abs.to_string_lossy();
+        let abs_s = abs_s.strip_prefix(r"\\?\").unwrap_or(&abs_s);
+        out.push(format!("-Djavar.native.path={abs_s}"));
+        if let Some(dir) = Path::new(abs_s).parent() {
             out.push(format!("-Djava.library.path={}", dir.display()));
         }
     }
 
     let mut rest = user_args.to_vec();
+    let spring = is_spring_boot(&project.root);
+
+    // Spring Boot: prefer executable fat jar (`java -jar`).
+    if !args_have_classpath(&rest) && spring {
+        if let Some(jar) = find_spring_boot_jar(&project.root) {
+            info!(jar = %jar.display(), "Spring Boot fat jar launch");
+            let jar_s = jar.to_string_lossy();
+            let jar_s = jar_s.strip_prefix(r"\\?\").unwrap_or(&jar_s);
+            out.push("-jar".into());
+            out.push(jar_s.to_string());
+            // Program args only (no main class after -jar).
+            rest.retain(|a| !looks_like_main_class(a));
+            out.extend(rest);
+            return Ok(out);
+        }
+    }
 
     if !args_have_classpath(&rest) {
         let classes = project
@@ -383,8 +533,24 @@ pub fn build_java_launch_args(
                 "no compiled classes found (expected target/classes or build/classes/java/main). \
                  Run:  javar build",
             )?;
+        let classes_s = classes.to_string_lossy();
+        let classes_s = classes_s.strip_prefix(r"\\?\").unwrap_or(&classes_s);
+
+        let sep = if cfg!(windows) { ";" } else { ":" };
+        let cp = if spring {
+            // Spring Boot without fat jar yet: classes + Maven runtime deps.
+            match maven_runtime_classpath(&project.root) {
+                Some(deps) => {
+                    info!("Spring Boot classpath = target/classes + dependency:build-classpath");
+                    format!("{classes_s}{sep}{deps}")
+                }
+                None => classes_s.to_string(),
+            }
+        } else {
+            classes_s.to_string()
+        };
         out.push("-cp".into());
-        out.push(classes.display().to_string());
+        out.push(cp);
     }
 
     if !args_have_main_class(&rest) {
@@ -392,12 +558,9 @@ pub fn build_java_launch_args(
             "no main class provided and none found with `public static void main`. \
              Pass one after `--`, e.g. `javar run -- com.example.App`",
         )?;
-        // If user passed program args only (unlikely without main), keep them after main.
         if rest.is_empty() {
             rest.push(main);
         } else if rest.iter().all(|a| !looks_like_main_class(a)) {
-            // Insert main before trailing program args that aren't options…
-            // Prefer: treat entire rest as program args after discovered main.
             let mut with_main = vec![main];
             with_main.append(&mut rest);
             rest = with_main;
@@ -410,6 +573,9 @@ pub fn build_java_launch_args(
 
 /// Whether this directory looks like a Java app we can auto-launch.
 pub fn can_smart_launch(project: &SmartProject) -> bool {
+    if is_spring_boot(&project.root) && find_spring_boot_jar(&project.root).is_some() {
+        return true;
+    }
     project.classes_dir.is_some()
         && (project.build != BuildSystem::Unknown
             || !project.source_roots.is_empty()
@@ -417,7 +583,9 @@ pub fn can_smart_launch(project: &SmartProject) -> bool {
 }
 
 pub fn describe_project(project: &SmartProject) -> String {
+    let name = project_display_name(&project.root);
     let build = match project.build {
+        BuildSystem::Maven if is_spring_boot(&project.root) => "Spring Boot (Maven)",
         BuildSystem::Maven => "Maven",
         BuildSystem::Gradle => "Gradle",
         BuildSystem::Unknown => "unknown",
@@ -427,7 +595,30 @@ pub fn describe_project(project: &SmartProject) -> String {
         .as_ref()
         .map(|p| p.display().to_string())
         .unwrap_or_else(|| "(none)".into());
-    format!("build={build}, classes={classes}")
+    format!("project={name}, build={build}, classes={classes}")
+}
+
+fn java_major() -> Option<u32> {
+    let out = std::process::Command::new("java")
+        .args(["-XshowSettings:properties", "-version"])
+        .output()
+        .ok()?;
+    let text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&out.stderr),
+        String::from_utf8_lossy(&out.stdout)
+    );
+    for line in text.lines() {
+        let line = line.trim();
+        if let Some(rest) = line.strip_prefix("java.specification.version = ") {
+            let v = rest.trim();
+            if let Some(rest) = v.strip_prefix("1.") {
+                return rest.parse().ok();
+            }
+            return v.parse().ok();
+        }
+    }
+    None
 }
 
 #[cfg(test)]

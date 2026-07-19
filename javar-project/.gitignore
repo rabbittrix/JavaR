@@ -14,6 +14,9 @@ javar-cli/embedded/
 # Release / dist staging
 /dist/
 
+# Auto-downloaded Apache Maven (build.rs bootstrap)
+.tools/
+
 # Legacy / local VS Code extension under this tree
 javar-vscode/node_modules/
 javar-vscode/out/

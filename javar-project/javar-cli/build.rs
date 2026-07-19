@@ -1,4 +1,5 @@
-//! Ensure javar-agent.jar exists (auto-run Maven if needed), then stage embeds for include_bytes!.
+//! Ensure `javar-agent/target/javar-agent.jar` exists before Rust compile.
+//! Runs Maven via PATH, or auto-downloads Apache Maven into `.tools/` when missing.
 //! Author: Roberto de Souza <rabbittrix@hotmail.com>
 
 use std::env;
@@ -6,75 +7,79 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+const MAVEN_VERSION: &str = "3.9.6";
+
 fn main() {
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
     let emb = out_dir.join("embedded");
     fs::create_dir_all(&emb).expect("create OUT_DIR/embedded");
 
-    let agent_dir = manifest_dir.join("../javar-agent");
+    let workspace = manifest_dir
+        .join("..")
+        .canonicalize()
+        .unwrap_or_else(|_| manifest_dir.join(".."));
+    let agent_dir = workspace.join("javar-agent");
+    let pom = agent_dir.join("pom.xml");
     let agent_target = agent_dir.join("target");
     let stable_jar = agent_target.join("javar-agent.jar");
 
     println!("cargo:rerun-if-env-changed=JAVAR_EMBED_AGENT");
     println!("cargo:rerun-if-env-changed=JAVAR_EMBED_NATIVE");
     println!("cargo:rerun-if-env-changed=JAVAR_SKIP_AGENT_EMBED");
-    println!("cargo:rerun-if-changed={}", agent_dir.join("pom.xml").display());
+    println!("cargo:rerun-if-changed={}", pom.display());
+    println!("cargo:rerun-if-changed={}", agent_dir.join("src").display());
     println!("cargo:rerun-if-changed={}", agent_target.display());
     println!("cargo:rerun-if-changed=../target/release");
     println!("cargo:rerun-if-changed=../target/debug");
 
-    // --- Agent JAR: ensure stable path for include_bytes! ---
     let skip = env::var("JAVAR_SKIP_AGENT_EMBED").ok().as_deref() == Some("1");
+    let force_agent = env::var("JAVAR_FORCE_AGENT_BUILD").ok().as_deref() == Some("1");
+
     if let Ok(p) = env::var("JAVAR_EMBED_AGENT") {
         let p = PathBuf::from(p);
         if p.is_file() {
             fs::create_dir_all(&agent_target).ok();
-            fs::copy(&p, &stable_jar).expect("copy JAVAR_EMBED_AGENT → javar-agent.jar");
+            ensure_stable_copy(&p, &stable_jar);
         }
     }
 
-    if !stable_jar.is_file() || file_is_empty(&stable_jar) {
-        // Remove empty stub so we don't mistake it for a real artifact.
-        if stable_jar.is_file() && file_is_empty(&stable_jar) {
-            let _ = fs::remove_file(&stable_jar);
+    let sources_newer = agent_sources_newer_than(&agent_dir, &stable_jar);
+
+    if force_agent || !is_real_jar(&stable_jar) || sources_newer {
+        if !skip {
+            println!("cargo:warning=Building agent via internal Maven caller…");
+            run_maven_package(&workspace, &pom);
         }
         if let Some(found) = pick_agent_jar(&agent_target) {
             ensure_stable_copy(&found, &stable_jar);
             println!("cargo:warning=using agent jar {}", found.display());
-        } else if !skip {
-            println!("cargo:warning=javar-agent.jar missing — running Maven package…");
-            run_maven_package(&agent_dir);
-            if let Some(found) = pick_agent_jar(&agent_target) {
-                ensure_stable_copy(&found, &stable_jar);
-            }
+        }
+    } else if let Some(found) = pick_agent_jar(&agent_target) {
+        // Keep stable copy in sync with shaded artifact when versions drift.
+        if jar_newer(&found, &stable_jar) {
+            ensure_stable_copy(&found, &stable_jar);
+            println!("cargo:warning=refreshed stable agent jar from {}", found.display());
         }
     }
 
-    // Stable jar must exist for `include_bytes!("../../javar-agent/target/javar-agent.jar")` in embed.rs.
-    let has_agent = if stable_jar.is_file() && !file_is_empty(&stable_jar) {
+    if is_real_jar(&stable_jar) {
         println!(
-            "cargo:warning=embedding agent ({} bytes) from {}",
+            "cargo:warning=agent ready for include_bytes ({} bytes): {}",
             fs::metadata(&stable_jar).map(|m| m.len()).unwrap_or(0),
             stable_jar.display()
         );
-        true
     } else if skip {
         fs::create_dir_all(&agent_target).ok();
-        fs::write(&stable_jar, []).expect("empty stable agent stub");
-        println!("cargo:warning=JAVAR_SKIP_AGENT_EMBED=1 — empty javar-agent.jar stub for compile");
-        false
+        fs::write(&stable_jar, []).expect("empty agent stub");
+        println!("cargo:warning=JAVAR_SKIP_AGENT_EMBED=1 — empty jar stub (dev only)");
     } else {
         panic!(
-            "javar-agent.jar not found after Maven build.\n\
-             Expected: {}\n\
-             Install Maven, then rebuild. Or set JAVAR_EMBED_AGENT to a jar path.\n\
-             PowerShell-safe (no &&):  mvn -f javar-agent/pom.xml clean package -DskipTests",
+            "Agent JAR missing after internal Maven caller.\nExpected: {}",
             stable_jar.display()
         )
-    };
+    }
 
-    // --- Native lib (optional if not built yet) ---
     let native_name = native_lib_filename();
     let native_dst = emb.join(native_name);
     let has_native = match find_native_lib(&manifest_dir, native_name) {
@@ -86,7 +91,7 @@ fn main() {
         None => {
             fs::write(&native_dst, []).expect("empty native stub");
             println!(
-                "cargo:warning={} not found — build javar-core first for off-heap support",
+                "cargo:warning={} not found — build javar-core for off-heap support",
                 native_name
             );
             false
@@ -96,18 +101,84 @@ fn main() {
     let native_lit = path_literal(&native_dst);
     let gen = format!(
         r#"// @generated by build.rs — do not edit
-// Agent JAR is included from ../../javar-agent/target/javar-agent.jar in embed.rs
 pub const EMBEDDED_NATIVE: &[u8] = include_bytes!(r"{native_lit}");
 pub const NATIVE_NAME: &str = "{native_name}";
-pub const HAS_EMBEDDED_AGENT: bool = {has_agent};
 pub const HAS_EMBEDDED_NATIVE: bool = {has_native};
 "#
     );
     fs::write(out_dir.join("embedded_assets.rs"), gen).expect("write embedded_assets.rs");
 }
 
-fn file_is_empty(p: &Path) -> bool {
-    fs::metadata(p).map(|m| m.len() == 0).unwrap_or(true)
+fn is_real_jar(p: &Path) -> bool {
+    fs::metadata(p).map(|m| m.len() > 0).unwrap_or(false)
+}
+
+fn jar_newer(candidate: &Path, stable: &Path) -> bool {
+    match (fs::metadata(candidate), fs::metadata(stable)) {
+        (Ok(a), Ok(b)) => match (a.modified(), b.modified()) {
+            (Ok(am), Ok(bm)) => am > bm,
+            _ => a.len() != b.len(),
+        },
+        (Ok(_), Err(_)) => true,
+        _ => false,
+    }
+}
+
+/// Rebuild the agent when any Java/MRJAR source is newer than the stable jar.
+fn agent_sources_newer_than(agent_dir: &Path, stable_jar: &Path) -> bool {
+    let Ok(jar_meta) = fs::metadata(stable_jar) else {
+        return true;
+    };
+    let Ok(jar_mtime) = jar_meta.modified() else {
+        return true;
+    };
+    for root in [
+        agent_dir.join("src/main/java"),
+        agent_dir.join("src/main/java22"),
+        agent_dir.join("src/main/resources"),
+    ] {
+        if !root.is_dir() {
+            continue;
+        }
+        let walker = walkdir_simple(&root);
+        for path in walker {
+            if let Ok(meta) = fs::metadata(&path) {
+                if let Ok(m) = meta.modified() {
+                    if m > jar_mtime {
+                        println!(
+                            "cargo:warning=agent source newer than jar: {}",
+                            path.display()
+                        );
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+    false
+}
+
+fn walkdir_simple(root: &Path) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    let mut stack = vec![root.to_path_buf()];
+    while let Some(dir) = stack.pop() {
+        let Ok(rd) = fs::read_dir(&dir) else {
+            continue;
+        };
+        for e in rd.flatten() {
+            let p = e.path();
+            if p.is_dir() {
+                stack.push(p);
+            } else if p
+                .extension()
+                .and_then(|x| x.to_str())
+                .is_some_and(|x| matches!(x, "java" | "xml" | "properties"))
+            {
+                out.push(p);
+            }
+        }
+    }
+    out
 }
 
 fn path_literal(p: &Path) -> String {
@@ -124,73 +195,361 @@ fn native_lib_filename() -> &'static str {
     }
 }
 
-/// Run `mvn -f <pom> clean package -DskipTests` via direct Command (no shell `&&`).
-fn run_maven_package(agent_dir: &Path) {
-    let pom = agent_dir.join("pom.xml");
+fn run_maven_package(workspace: &Path, pom: &Path) {
     if !pom.is_file() {
         panic!("javar-agent pom.xml missing at {}", pom.display());
     }
-    let pom_str = pom.to_string_lossy().to_string();
+    let pom_str = native_path(pom);
+    let mvn = resolve_maven(workspace);
+    let mvn_str = native_path(&mvn);
+    let java_home = resolve_java_home();
+    println!("cargo:warning=Building project via internal Maven caller ({mvn_str})");
+    println!("cargo:warning=JAVA_HOME={}", java_home.display());
 
-    let mut mvn_candidates: Vec<PathBuf> = Vec::new();
-    if cfg!(windows) {
-        mvn_candidates.push(PathBuf::from("mvn.cmd"));
+    let mut cmd = if cfg!(windows) {
+        // Always use cmd /C on Windows so .cmd scripts resolve.
+        let mut c = Command::new("cmd");
+        c.args([
+            "/C",
+            &mvn_str,
+            "-f",
+            &pom_str,
+            "-B",
+            "-DskipTests",
+            "package",
+        ]);
+        c
+    } else {
+        let mut c = Command::new(&mvn);
+        c.args(["-f", &pom_str, "-B", "-DskipTests", "package"]);
+        c
+    };
+    cmd.env("JAVA_HOME", &java_home);
+    // Put JDK bin first (avoids broken Oracle javapath / stale JAVA_HOME).
+    let sep = if cfg!(windows) { ";" } else { ":" };
+    let mut new_path = java_home.join("bin").into_os_string();
+    new_path.push(sep);
+    new_path.push(env::var_os("PATH").unwrap_or_default());
+    cmd.env("PATH", new_path);
+
+    match cmd.status() {
+        Ok(st) if st.success() => {}
+        Ok(st) => panic!(
+            "Building project via internal Maven caller failed ({st}).\nMaven: {mvn_str}\nJAVA_HOME: {}",
+            java_home.display()
+        ),
+        Err(e) => panic!(
+            "Building project via internal Maven caller failed to spawn {mvn_str}: {e}"
+        ),
     }
-    mvn_candidates.push(PathBuf::from("mvn"));
-    // Common Windows install locations (no shell PATH quirks).
-    if cfg!(windows) {
-        if let Ok(home) = env::var("USERPROFILE") {
-            for rel in [
-                "scoop\\apps\\maven\\current\\bin\\mvn.cmd",
-                "apache-maven\\bin\\mvn.cmd",
-            ] {
-                let p = PathBuf::from(&home).join(rel);
-                if p.is_file() {
-                    mvn_candidates.push(p);
+}
+
+/// Find a real JDK home (bin/javac exists). Fixes broken/orphaned JAVA_HOME values.
+fn resolve_java_home() -> PathBuf {
+    let candidates: Vec<PathBuf> = {
+        let mut v = Vec::new();
+        if let Ok(jh) = env::var("JAVA_HOME") {
+            v.push(PathBuf::from(jh));
+        }
+        if let Some(from_java) = java_home_from_running_java() {
+            v.push(from_java);
+        }
+        if cfg!(windows) {
+            if let Ok(rd) = fs::read_dir(r"C:\Program Files\Java") {
+                for e in rd.flatten() {
+                    v.push(e.path());
                 }
             }
-        }
-        for root in [
-            r"C:\Program Files\Apache\maven\bin\mvn.cmd",
-            r"C:\Program Files\Maven\bin\mvn.cmd",
-            r"C:\apache-maven\bin\mvn.cmd",
-        ] {
-            let p = PathBuf::from(root);
-            if p.is_file() {
-                mvn_candidates.push(p);
+            for root in [
+                r"C:\Program Files\Eclipse Adoptium",
+                r"C:\Program Files\Microsoft",
+                r"C:\Program Files\Amazon Corretto",
+                r"C:\Program Files\AdoptOpenJDK",
+            ] {
+                if let Ok(rd) = fs::read_dir(root) {
+                    for e in rd.flatten() {
+                        let p = e.path();
+                        if p.file_name()
+                            .and_then(|n| n.to_str())
+                            .map(|n| n.to_ascii_lowercase().contains("jdk"))
+                            .unwrap_or(false)
+                        {
+                            v.push(p);
+                        }
+                    }
+                }
             }
+        } else {
+            v.extend([
+                PathBuf::from("/usr/lib/jvm/default-java"),
+                PathBuf::from("/Library/Java/JavaVirtualMachines"),
+            ]);
         }
-    }
+        v
+    };
 
-    let mut last_err = String::new();
-    for mvn in &mvn_candidates {
-        println!(
-            "cargo:warning=exec: {} -f … clean package -DskipTests",
-            mvn.display()
-        );
-        let status = Command::new(mvn)
-            .args(["-f", &pom_str, "-B", "-DskipTests", "clean", "package"])
-            .status();
-        match status {
-            Ok(st) if st.success() => return,
-            Ok(st) => last_err = format!("{} exited with {st}", mvn.display()),
-            Err(e) => last_err = format!("failed to spawn {}: {e}", mvn.display()),
+    for c in &candidates {
+        if is_valid_jdk(c) {
+            return c.clone();
         }
     }
 
     panic!(
-        "Maven package failed for javar-agent ({last_err}).\n\
-         Install Maven and ensure `mvn` is on PATH, then rebuild javar-cli.\n\
-         Do not use shell '&&' chains — Maven is invoked from build.rs directly."
+        "No valid JDK found for Maven (need a directory with bin/javac).\n\
+         Install a JDK 17+ and/or set JAVA_HOME to that directory."
     );
 }
 
-fn ensure_stable_copy(src: &Path, dest: &Path) {
-    if src == dest || same_file(src, dest) {
+fn is_valid_jdk(home: &Path) -> bool {
+    let javac = if cfg!(windows) {
+        home.join("bin").join("javac.exe")
+    } else {
+        home.join("bin").join("javac")
+    };
+    javac.is_file()
+}
+
+fn java_home_from_running_java() -> Option<PathBuf> {
+    let out = Command::new("java")
+        .args(["-XshowSettings:properties", "-version"])
+        .output()
+        .ok()?;
+    // Settings go to stderr.
+    let text = String::from_utf8_lossy(&out.stderr);
+    for line in text.lines() {
+        let line = line.trim();
+        if let Some(rest) = line.strip_prefix("java.home = ") {
+            let home = PathBuf::from(rest.trim());
+            // java.home may be a JRE; prefer parent if this is .../jre
+            if is_valid_jdk(&home) {
+                return Some(home);
+            }
+            if let Some(parent) = home.parent() {
+                if is_valid_jdk(parent) {
+                    return Some(parent.to_path_buf());
+                }
+            }
+            return Some(home);
+        }
+    }
+    None
+}
+
+/// PATH → local mvnw → auto-downloaded Apache Maven under `.tools/`.
+fn resolve_maven(workspace: &Path) -> PathBuf {
+    if let Some(p) = find_system_maven() {
+        return p;
+    }
+
+    let agent = workspace.join("javar-agent");
+    for name in ["mvnw.cmd", "mvnw"] {
+        let p = agent.join(name);
+        if p.is_file() {
+            return p;
+        }
+    }
+
+    println!("cargo:warning=Maven not on PATH — bootstrapping Apache Maven {MAVEN_VERSION}…");
+    bootstrap_maven(workspace)
+}
+
+fn find_system_maven() -> Option<PathBuf> {
+    let names: &[&str] = if cfg!(windows) {
+        &["mvn.cmd", "mvn"]
+    } else {
+        &["mvn"]
+    };
+
+    // `where` / `which` via cmd so PATH is honored on Windows.
+    if cfg!(windows) {
+        for name in names {
+            if let Ok(out) = Command::new("where").arg(name).output() {
+                if out.status.success() {
+                    let text = String::from_utf8_lossy(&out.stdout);
+                    if let Some(line) = text.lines().next() {
+                        let p = PathBuf::from(line.trim());
+                        if p.is_file() {
+                            return Some(p);
+                        }
+                    }
+                }
+            }
+        }
+    } else if let Ok(out) = Command::new("which").arg("mvn").output() {
+        if out.status.success() {
+            let text = String::from_utf8_lossy(&out.stdout);
+            if let Some(line) = text.lines().next() {
+                let p = PathBuf::from(line.trim());
+                if p.is_file() {
+                    return Some(p);
+                }
+            }
+        }
+    }
+
+    let mut candidates = Vec::new();
+    if cfg!(windows) {
+        if let Ok(home) = env::var("USERPROFILE") {
+            candidates.push(
+                PathBuf::from(&home).join("scoop\\apps\\maven\\current\\bin\\mvn.cmd"),
+            );
+        }
+        // MAVEN_HOME may be the install root OR incorrectly set to …\bin.
+        if let Ok(m2) = env::var("MAVEN_HOME") {
+            let home = PathBuf::from(m2.trim());
+            candidates.push(home.join("bin\\mvn.cmd"));
+            candidates.push(home.join("mvn.cmd"));
+        }
+        candidates.extend([
+            PathBuf::from(r"C:\maven\bin\mvn.cmd"),
+            PathBuf::from(r"C:\Program Files\Apache\maven\bin\mvn.cmd"),
+            PathBuf::from(r"C:\Program Files\Maven\bin\mvn.cmd"),
+            PathBuf::from(r"C:\apache-maven\bin\mvn.cmd"),
+        ]);
+    } else {
+        if let Ok(m2) = env::var("MAVEN_HOME") {
+            let home = PathBuf::from(m2.trim());
+            candidates.push(home.join("bin/mvn"));
+            candidates.push(home.join("mvn"));
+        }
+        candidates.extend([
+            PathBuf::from("/usr/local/bin/mvn"),
+            PathBuf::from("/opt/homebrew/bin/mvn"),
+        ]);
+    }
+
+    candidates.into_iter().find(|p| p.is_file())
+}
+
+fn bootstrap_maven(workspace: &Path) -> PathBuf {
+    let tools = workspace.join(".tools");
+    let maven_home = tools.join(format!("apache-maven-{MAVEN_VERSION}"));
+    let mvn = if cfg!(windows) {
+        maven_home.join("bin").join("mvn.cmd")
+    } else {
+        maven_home.join("bin").join("mvn")
+    };
+
+    if mvn.is_file() {
+        println!("cargo:warning=using bootstrapped Maven at {}", mvn.display());
+        return mvn;
+    }
+
+    fs::create_dir_all(&tools).expect("create .tools");
+    let zip_name = format!("apache-maven-{MAVEN_VERSION}-bin.zip");
+    let zip_path = tools.join(&zip_name);
+    let url = format!(
+        "https://archive.apache.org/dist/maven/maven-3/{MAVEN_VERSION}/binaries/{zip_name}"
+    );
+
+    println!("cargo:warning=Downloading {url}");
+    download_file(&url, &zip_path);
+    println!("cargo:warning=Extracting {}", zip_path.display());
+    extract_zip(&zip_path, &tools);
+
+    if !mvn.is_file() {
+        panic!(
+            "Maven bootstrap failed — expected {} after extract",
+            mvn.display()
+        );
+    }
+    // Make Unix mvn executable
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = fs::metadata(&mvn).unwrap().permissions();
+        perms.set_mode(0o755);
+        let _ = fs::set_permissions(&mvn, perms);
+    }
+
+    println!("cargo:warning=Bootstrapped Maven ready: {}", mvn.display());
+    mvn
+}
+
+/// Strip Windows `\\?\` extended-path prefix (breaks Expand-Archive / some tools).
+fn native_path(p: &Path) -> String {
+    let s = p.to_string_lossy();
+    s.strip_prefix(r"\\?\").unwrap_or(&s).replace('/', "\\")
+}
+
+fn download_file(url: &str, dest: &Path) {
+    if dest.is_file() && fs::metadata(dest).map(|m| m.len() > 1_000_000).unwrap_or(false) {
         return;
     }
+    let tmp = dest.with_extension("download");
+    let _ = fs::remove_file(&tmp);
+    let tmp_s = native_path(&tmp);
+
+    // Prefer curl (ships with Windows 10+).
+    let curl_ok = Command::new("curl")
+        .args(["-fsSL", "--retry", "3", "-o", &tmp_s, url])
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false);
+
+    if !curl_ok {
+        let ps = format!(
+            "Invoke-WebRequest -Uri '{url}' -OutFile '{tmp_s}' -UseBasicParsing"
+        );
+        let status = Command::new("powershell")
+            .args(["-NoProfile", "-Command", &ps])
+            .status()
+            .expect("spawn powershell for Maven download");
+        if !status.success() {
+            panic!("Failed to download Maven from {url}");
+        }
+    }
+
+    fs::rename(&tmp, dest).unwrap_or_else(|_| {
+        fs::copy(&tmp, dest).expect("copy maven zip");
+        let _ = fs::remove_file(&tmp);
+    });
+}
+
+fn extract_zip(zip: &Path, dest_dir: &Path) {
+    let zip_s = native_path(zip);
+    let dest_s = native_path(dest_dir);
+
+    // tar.exe is available on modern Windows and handles zip; avoid Expand-Archive `\\?\` bugs.
+    let tar_ok = Command::new("tar")
+        .args(["-xf", &zip_s, "-C", &dest_s])
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false);
+    if tar_ok {
+        return;
+    }
+
+    if cfg!(windows) {
+        let ps = format!(
+            "Expand-Archive -LiteralPath '{zip_s}' -DestinationPath '{dest_s}' -Force"
+        );
+        let status = Command::new("powershell")
+            .args(["-NoProfile", "-Command", &ps])
+            .status()
+            .expect("spawn Expand-Archive");
+        if !status.success() {
+            panic!("Failed to extract {zip_s}");
+        }
+    } else {
+        let status = Command::new("unzip")
+            .args(["-qo", &zip_s, "-d", &dest_s])
+            .status()
+            .expect("spawn unzip");
+        if !status.success() {
+            panic!("Failed to extract {zip_s}");
+        }
+    }
+}
+
+fn ensure_stable_copy(src: &Path, dest: &Path) {
+    if same_file(src, dest) {
+        return;
+    }
+    if let Some(parent) = dest.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
     if let Err(e) = fs::copy(src, dest) {
-        // Windows: destination may be locked — write via temp + rename.
         let tmp = dest.with_extension("jar.tmp");
         fs::copy(src, &tmp).unwrap_or_else(|e2| {
             panic!("copy {} → {}: {e} / tmp: {e2}", src.display(), dest.display())
@@ -215,7 +574,7 @@ fn pick_agent_jar(dir: &Path) -> Option<PathBuf> {
         .filter_map(|e| e.ok())
         .map(|e| e.path())
         .filter(|p| {
-            if file_is_empty(p) {
+            if !is_real_jar(p) {
                 return false;
             }
             p.extension().and_then(|e| e.to_str()) == Some("jar")
@@ -223,8 +582,8 @@ fn pick_agent_jar(dir: &Path) -> Option<PathBuf> {
                     .and_then(|n| n.to_str())
                     .map(|n| {
                         let l = n.to_ascii_lowercase();
-                        // Prefer real Maven artifacts; ignore the stable alias name itself.
-                        (l.starts_with("javar-agent-") || l == "javar-agent.jar")
+                        l.starts_with("javar-agent-")
+                            && l.ends_with(".jar")
                             && !l.contains("sources")
                             && !l.contains("javadoc")
                             && !l.contains("original")
@@ -233,15 +592,6 @@ fn pick_agent_jar(dir: &Path) -> Option<PathBuf> {
         })
         .collect();
     jars.sort();
-    // Prefer versioned shaded artifact over the stable alias.
-    if let Some(preferred) = jars.iter().find(|p| {
-        p.file_name()
-            .and_then(|n| n.to_str())
-            .map(|n| n.starts_with("javar-agent-") && n.ends_with(".jar"))
-            .unwrap_or(false)
-    }) {
-        return Some(preferred.clone());
-    }
     jars.pop()
 }
 
@@ -252,15 +602,14 @@ fn find_native_lib(manifest_dir: &Path, name: &str) -> Option<PathBuf> {
             return Some(p);
         }
     }
-
     let triple = env::var("TARGET").unwrap_or_else(|_| env::var("HOST").unwrap_or_default());
-    let candidates = [
+    [
         manifest_dir.join("../target/release").join(name),
         manifest_dir.join("../target/debug").join(name),
         manifest_dir.join(format!("../target/{triple}/release/{name}")),
         manifest_dir.join(format!("../target/{triple}/debug/{name}")),
         manifest_dir.join("embedded").join(name),
-    ];
-
-    candidates.into_iter().find(|p| p.is_file())
+    ]
+    .into_iter()
+    .find(|p| p.is_file())
 }

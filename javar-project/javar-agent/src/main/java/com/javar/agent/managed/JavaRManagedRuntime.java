@@ -26,8 +26,6 @@ public final class JavaRManagedRuntime {
     public static final String REGION_DESC = "J";
 
     private static final Map<String, FieldLayout> LAYOUTS = new ConcurrentHashMap<String, FieldLayout>();
-    /** identity → region id (fallback when synthetic field not yet visible) */
-    private static final Map<Integer, Long> REGION_BY_IDENTITY = new ConcurrentHashMap<Integer, Long>();
 
     private static final ReferenceQueue<Object> QUEUE = new ReferenceQueue<Object>();
     private static final Map<WeakRef, Long> WEAK_REGIONS = new ConcurrentHashMap<WeakRef, Long>();
@@ -75,6 +73,9 @@ public final class JavaRManagedRuntime {
     /**
      * Ensure {@code shell} has an off-heap region; returns region id.
      * Invoked from rewritten constructors / first field access.
+     * <p>
+     * Region ids are stored only on the synthetic {@code __javar_region} field —
+     * never in an identityHashCode map (those collide under high churn / after GC).
      */
     public static long ensureRegion(Object shell, String className) {
         if (shell == null) {
@@ -83,11 +84,6 @@ public final class JavaRManagedRuntime {
         long existing = readRegionField(shell);
         if (existing != 0L) {
             return existing;
-        }
-        Integer key = System.identityHashCode(shell);
-        Long cached = REGION_BY_IDENTITY.get(key);
-        if (cached != null && cached.longValue() != 0L) {
-            return cached.longValue();
         }
 
         FieldLayout layout = LAYOUTS.get(className);
@@ -107,7 +103,6 @@ public final class JavaRManagedRuntime {
         }
 
         writeRegionField(shell, id);
-        REGION_BY_IDENTITY.put(key, id);
         BYTES_OFF_HEAP.addAndGet(size);
         REGION_COUNT.incrementAndGet();
         track(shell, id, size);
@@ -217,14 +212,28 @@ public final class JavaRManagedRuntime {
 
     private static ByteBuffer buffer(Object shell, String className) {
         long id = ensureRegion(shell, className);
+        if (id >= FallbackArena.MIN_ID) {
+            return FallbackArena.buffer(id).order(ByteOrder.LITTLE_ENDIAN);
+        }
         OffHeapBridge b = bridge();
-        if (b != null && id > 0L && id < FallbackArena.MIN_ID) {
+        if (b != null && id > 0L) {
             ByteBuffer buf = b.asByteBuffer(id);
             if (buf != null) {
                 return buf.order(ByteOrder.LITTLE_ENDIAN);
             }
+            // Native region disappeared (freed) — force reallocate once.
+            writeRegionField(shell, 0L);
+            id = ensureRegion(shell, className);
+            if (id >= FallbackArena.MIN_ID) {
+                return FallbackArena.buffer(id).order(ByteOrder.LITTLE_ENDIAN);
+            }
+            buf = b.asByteBuffer(id);
+            if (buf != null) {
+                return buf.order(ByteOrder.LITTLE_ENDIAN);
+            }
         }
-        return FallbackArena.buffer(id).order(ByteOrder.LITTLE_ENDIAN);
+        throw new IllegalStateException(
+                "off-heap region unavailable for " + className + " (id=" + id + ")");
     }
 
     private static OffHeapBridge bridge() {
@@ -256,7 +265,7 @@ public final class JavaRManagedRuntime {
             f.setAccessible(true);
             f.setLong(shell, id);
         } catch (Throwable t) {
-            // identity map still holds the id
+            // Field may be missing before transform completes; caller retries on access.
         }
     }
 

@@ -3,6 +3,7 @@
 
 mod dashboard;
 mod embed;
+mod maven;
 mod setup;
 mod smart_build;
 mod smart_run;
@@ -20,6 +21,11 @@ use std::process::{Command, Stdio};
 use std::time::Duration;
 use tracing::warn;
 use tracing_subscriber::EnvFilter;
+
+/// Embedded agent JAR — produced by `build.rs` via internal Maven before compile.
+/// Path is relative to this file (`javar-cli/src/main.rs`).
+pub(crate) const AGENT_BYTES: &[u8] =
+    include_bytes!("../../javar-agent/target/javar-agent.jar");
 
 #[derive(Parser, Debug)]
 #[command(
@@ -103,6 +109,15 @@ fn main() -> Result<()> {
                 EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("warn")),
             )
             .init();
+    }
+
+    // Quiet diagnostic: prove this binary embeds the agent (catches stale PATH copies).
+    if std::env::args().any(|a| a == "--version" || a == "-V") {
+        eprintln!(
+            "javar {} (embedded agent: {} bytes)",
+            env!("CARGO_PKG_VERSION"),
+            AGENT_BYTES.len()
+        );
     }
 
     match cli.command {
@@ -206,9 +221,8 @@ fn cmd_run(
 ) -> Result<()> {
     style::banner_line("JavaR smart run");
 
-    // Resolve agent + native: local/dev first, else extract embeds to ~/.javar/bin
-    let agent_jar = embed::resolve_or_extract_agent(path, agent)?;
-    let agent_abs = absolute_path(&agent_jar)?;
+    // NEVER fail with "jar not found" — write AGENT_BYTES to ~/.javar/bin if needed.
+    let agent_abs = embed::ensure_agent_jar(agent)?;
     let agent_flag = format!("-javaagent:{}=port={}", agent_abs.display(), port);
     let native = embed::resolve_or_extract_native(path);
 
@@ -217,6 +231,7 @@ fn cmd_run(
         project = smart_build::ensure_project_built(&project, auto_yes)?;
     }
 
+    let project_name = smart_run::project_display_name(&project.root);
     style::info_line(smart_run::describe_project(&project));
     style::ok(format!("Agent  {}", agent_abs.display()));
     if let Some(ref n) = native {
@@ -231,7 +246,11 @@ fn cmd_run(
 
     let java_argv = if want_java {
         match smart_run::build_java_launch_args(&project, args, native.as_deref()) {
-            Ok(v) => Some(v),
+            Ok(mut v) => {
+                // Surface project name to agent telemetry / dashboard.
+                v.insert(0, format!("-Djavar.project.name={project_name}"));
+                Some(v)
+            }
             Err(e) if args.is_empty() && !watch_only => {
                 warn!("smart java launch skipped: {e:#}");
                 style::warn_line(format!("Java launch skipped: {e:#}"));
@@ -261,7 +280,7 @@ fn cmd_run(
 
     if !no_core {
         style::banner_line("Starting javar-core sidecar");
-        core_child = Some(spawn_core(path, &addr)?);
+        core_child = spawn_core(path, &addr)?;
     }
 
     if let Some(java_argv) = java_argv {
@@ -270,6 +289,7 @@ fn cmd_run(
         cmd.arg(&agent_flag)
             .args(&java_argv)
             .env("JAVAR_AGENT_ADDR", &addr)
+            .env("JAVAR_PROJECT_NAME", &project_name)
             .current_dir(&project.root)
             .stdin(Stdio::inherit())
             .stdout(Stdio::inherit())
@@ -302,35 +322,46 @@ fn cmd_run(
     Ok(())
 }
 
-fn spawn_core(path: &Path, addr: &str) -> Result<std::process::Child> {
+fn spawn_core(path: &Path, addr: &str) -> Result<Option<std::process::Child>> {
     if let Some(bin) = resolve_core_bin(path) {
-        return Command::new(bin)
+        let child = Command::new(&bin)
             .arg(path)
             .env("JAVAR_AGENT_ADDR", addr)
             .stdin(Stdio::null())
             .stdout(Stdio::inherit())
             .stderr(Stdio::inherit())
             .spawn()
-            .context("spawn javar-core");
+            .with_context(|| format!("spawn javar-core ({})", bin.display()))?;
+        return Ok(Some(child));
     }
 
-    // Spawn cargo as a direct Command (no shell `&&`).
-    Command::new("cargo")
-        .args([
-            "run",
-            "-q",
-            "-p",
-            "javar-core",
-            "--",
-            path.to_str().unwrap_or("."),
-        ])
-        .current_dir(workspace_root(path))
-        .env("JAVAR_AGENT_ADDR", addr)
-        .stdin(Stdio::null())
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
-        .spawn()
-        .context("cargo run javar-core")
+    let root = workspace_root(path);
+    // Only use `cargo run` when we're inside the JavaR source tree.
+    if root.join("Cargo.toml").is_file() && root.join("javar-core").is_dir() {
+        let child = Command::new("cargo")
+            .args([
+                "run",
+                "-q",
+                "-p",
+                "javar-core",
+                "--",
+                path.to_str().unwrap_or("."),
+            ])
+            .current_dir(&root)
+            .env("JAVAR_AGENT_ADDR", addr)
+            .stdin(Stdio::null())
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
+            .spawn()
+            .context("cargo run javar-core")?;
+        return Ok(Some(child));
+    }
+
+    style::warn_line(
+        "javar-core sidecar not installed — file watching disabled \
+         (JVM agent still runs). Fix: rebuild + `javar setup`",
+    );
+    Ok(None)
 }
 
 fn shell_escape(s: &str) -> String {
@@ -341,16 +372,6 @@ fn shell_escape(s: &str) -> String {
     } else {
         s.to_string()
     }
-}
-
-fn absolute_path(path: &Path) -> Result<PathBuf> {
-    if path.is_absolute() {
-        return Ok(path.canonicalize().unwrap_or_else(|_| path.to_path_buf()));
-    }
-    let abs = std::env::current_dir()
-        .context("current_dir")?
-        .join(path);
-    Ok(abs.canonicalize().unwrap_or(abs))
 }
 
 fn cmd_status(addr: &str) -> Result<()> {
@@ -395,16 +416,22 @@ fn cmd_status(addr: &str) -> Result<()> {
 fn resolve_core_bin(project: &Path) -> Option<PathBuf> {
     let root = workspace_root(project);
     let home_bin = embed::javar_bin_dir();
-    [
+    let beside_cli = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|d| d.to_path_buf()));
+    let mut candidates = vec![
         home_bin.join("javar-core.exe"),
         home_bin.join("javar-core"),
         root.join("target/release/javar-core.exe"),
         root.join("target/release/javar-core"),
         root.join("target/debug/javar-core.exe"),
         root.join("target/debug/javar-core"),
-    ]
-    .into_iter()
-    .find(|p| p.exists())
+    ];
+    if let Some(dir) = beside_cli {
+        candidates.push(dir.join("javar-core.exe"));
+        candidates.push(dir.join("javar-core"));
+    }
+    candidates.into_iter().find(|p| p.is_file())
 }
 
 pub(crate) fn workspace_root(hint: &Path) -> PathBuf {

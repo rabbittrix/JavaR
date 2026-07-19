@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.7
+
+- Auto-install / repair JavaR CLI on activation (`JavaR: Install / Repair CLI`)
+- Show running **project name** in the status bar and Off-Heap Regions view
+- Activate on `pom.xml` / Gradle build files (Maven & Spring Boot workspaces)
+- Align docs with Maven auto-bootstrap and Spring Boot fat-jar launch
+
 ## 0.1.6
 
 - Document `javar setup` / `javar build` and embedded agent force-extract in Marketplace README

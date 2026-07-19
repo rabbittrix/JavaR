@@ -1,6 +1,11 @@
-//! Embedded agent JAR + native library — force-extract to `~/.javar/bin/` when missing.
+//! Runtime extract of embedded agent / native lib to `~/.javar/bin/`.
 //! Author: Roberto de Souza <rabbittrix@hotmail.com>
+//!
+//! Agent resolution NEVER fails with "jar not found" / "cd … && mvn package".
+//! It always materializes [`crate::AGENT_BYTES`] under `~/.javar/bin/javar-agent.jar`.
 
+use crate::style;
+use crate::AGENT_BYTES;
 use anyhow::{bail, Context, Result};
 use indicatif::{ProgressBar, ProgressStyle};
 use std::fs;
@@ -12,11 +17,7 @@ mod assets {
     include!(concat!(env!("OUT_DIR"), "/embedded_assets.rs"));
 }
 
-use assets::{EMBEDDED_NATIVE, HAS_EMBEDDED_AGENT, HAS_EMBEDDED_NATIVE, NATIVE_NAME};
-
-/// Embedded agent — built by `build.rs` into this stable path before compile.
-/// Relative to `javar-cli/src/embed.rs` → `javar-project/javar-agent/target/javar-agent.jar`.
-const AGENT_JAR: &[u8] = include_bytes!("../../javar-agent/target/javar-agent.jar");
+use assets::{EMBEDDED_NATIVE, HAS_EMBEDDED_NATIVE, NATIVE_NAME};
 
 pub fn javar_home() -> PathBuf {
     if let Ok(p) = std::env::var("JAVAR_HOME") {
@@ -31,7 +32,8 @@ pub fn javar_bin_dir() -> PathBuf {
     javar_home().join("bin")
 }
 
-fn agent_cache_path() -> PathBuf {
+/// Absolute path used for `-javaagent:` (always under `~/.javar/bin/`).
+pub fn agent_jar_path() -> PathBuf {
     javar_bin_dir().join("javar-agent.jar")
 }
 
@@ -43,104 +45,130 @@ fn ensure_dir(dir: &Path) -> Result<()> {
     fs::create_dir_all(dir).with_context(|| format!("create {}", dir.display()))
 }
 
-fn write_with_progress(dest: &Path, bytes: &[u8], label: &str) -> Result<()> {
-    ensure_dir(dest.parent().unwrap())?;
-    let pb = ProgressBar::new(bytes.len() as u64);
-    pb.set_style(
-        ProgressStyle::with_template(
-            "{spinner:.magenta} {msg} [{bar:40.cyan/blue}] {bytes}/{total_bytes}",
-        )
-        .unwrap()
-        .progress_chars("█▓░"),
-    );
-    pb.set_message(format!("Extracting {label}"));
-    pb.enable_steady_tick(Duration::from_millis(80));
-    fs::write(dest, bytes).with_context(|| format!("write {}", dest.display()))?;
-    pb.finish_with_message(format!("Extracted {}", dest.display()));
-    Ok(())
-}
-
-/// Force-write embedded agent bytes to `~/.javar/bin/javar-agent.jar`.
-pub fn force_extract_agent() -> Result<PathBuf> {
-    if AGENT_JAR.is_empty() || !HAS_EMBEDDED_AGENT {
-        bail!(
-            "no embedded javar-agent.jar in this binary.\n\
-             Rebuild javar-cli with Maven on PATH (build.rs runs mvn package automatically),\n\
-             or set JAVAR_AGENT_JAR. Tip:  javar build"
-        );
-    }
-    let dest = agent_cache_path();
-    let needs_write = !dest.is_file()
-        || fs::metadata(&dest)
-            .map(|m| m.len() as usize != AGENT_JAR.len())
-            .unwrap_or(true);
-    if needs_write {
-        write_with_progress(&dest, AGENT_JAR, "javar-agent.jar")?;
-    }
-    Ok(dest.canonicalize().unwrap_or(dest))
-}
-
-/// Force-write embedded native lib when present.
-pub fn force_extract_native() -> Option<PathBuf> {
-    if !HAS_EMBEDDED_NATIVE || EMBEDDED_NATIVE.is_empty() {
-        return None;
-    }
-    let dest = native_cache_path();
-    let needs_write = !dest.is_file()
-        || fs::metadata(&dest)
-            .map(|m| m.len() as usize != EMBEDDED_NATIVE.len())
-            .unwrap_or(true);
-    if needs_write {
-        write_with_progress(&dest, EMBEDDED_NATIVE, NATIVE_NAME).ok()?;
-    }
-    Some(dest.canonicalize().unwrap_or(dest))
-}
-
-/// Resolve agent: overrides → force-extract embedded to `~/.javar/bin` → local last.
-pub fn resolve_or_extract_agent(project: &Path, explicit: Option<&Path>) -> Result<PathBuf> {
+/// Resolve the agent JAR for `-javaagent`.
+///
+/// - Optional `--agent` / `JAVAR_AGENT_JAR` override if the file exists.
+/// - Otherwise: if `~/.javar/bin/javar-agent.jar` is missing, write `AGENT_BYTES` immediately.
+/// - Returns the absolute path. Never suggests `cd … && mvn package`.
+pub fn ensure_agent_jar(explicit: Option<&Path>) -> Result<PathBuf> {
     if let Some(p) = explicit {
         if p.is_file() {
-            return Ok(p.canonicalize().unwrap_or_else(|_| p.to_path_buf()));
+            return Ok(absolute(p));
         }
-        bail!("agent JAR not found: {}", p.display());
+        style::warn_line(format!(
+            "--agent path missing ({}), extracting embedded version...",
+            p.display()
+        ));
     }
 
     if let Ok(env) = std::env::var("JAVAR_AGENT_JAR") {
         let p = PathBuf::from(&env);
         if p.is_file() {
-            return Ok(p.canonicalize().unwrap_or(p));
+            return Ok(absolute(&p));
+        }
+        style::warn_line("JAVAR_AGENT_JAR path missing, extracting embedded version...");
+    }
+
+    materialize_embedded_agent()
+}
+
+/// Write [`AGENT_BYTES`] to `~/.javar/bin/javar-agent.jar` when missing/stale/empty.
+pub fn materialize_embedded_agent() -> Result<PathBuf> {
+    let dest = agent_jar_path();
+    ensure_dir(dest.parent().unwrap())?;
+
+    if AGENT_BYTES.is_empty() {
+        // Should not happen for release builds — still avoid the old "mvn package" message.
+        bail!(
+            "this javar binary was built without an embedded agent (0 bytes).\n\
+             Reinstall with a release build:  cargo install --path javar-cli --force\n\
+             or run:  {} setup",
+            std::env::current_exe()
+                .map(|p| p.display().to_string())
+                .unwrap_or_else(|_| "javar".into())
+        );
+    }
+
+    let on_disk = dest.is_file()
+        .then(|| fs::metadata(&dest).ok().map(|m| m.len() as usize))
+        .flatten();
+
+    match on_disk {
+        Some(n) if n == AGENT_BYTES.len() && n > 0 => {
+            // Already good.
+        }
+        Some(_) => {
+            style::info_line("Updating embedded agent in ~/.javar/bin...");
+            fs::write(&dest, AGENT_BYTES)
+                .with_context(|| format!("write {}", dest.display()))?;
+            style::ok(format!("Agent → {}", dest.display()));
+        }
+        None => {
+            style::warn_line("Agent not found, extracting embedded version...");
+            fs::write(&dest, AGENT_BYTES)
+                .with_context(|| format!("write {}", dest.display()))?;
+            style::ok(format!("Agent → {}", dest.display()));
         }
     }
 
-    if !AGENT_JAR.is_empty() {
-        return force_extract_agent();
-    }
-
-    if let Some(local) = find_local_agent(project) {
-        let dest = agent_cache_path();
-        let _ = ensure_dir(dest.parent().unwrap());
-        let _ = fs::copy(&local, &dest);
-        return Ok(dest.canonicalize().unwrap_or(local));
-    }
-
-    let cached = agent_cache_path();
-    if cached.is_file() {
-        return Ok(cached.canonicalize().unwrap_or(cached));
-    }
-
-    bail!(
-        "javar-agent.jar not found.\n\
-         Rebuild javar-cli (build.rs embeds the agent) or set JAVAR_AGENT_JAR.\n\
-         Then run:  javar setup"
-    )
+    Ok(absolute(&dest))
 }
 
-/// Resolve native: env → force-extract → local/dev.
+fn absolute(p: &Path) -> PathBuf {
+    let raw = p.canonicalize().unwrap_or_else(|_| {
+        if p.is_absolute() {
+            p.to_path_buf()
+        } else {
+            std::env::current_dir()
+                .unwrap_or_else(|_| PathBuf::from("."))
+                .join(p)
+        }
+    });
+    // Strip Windows `\\?\` so `-javaagent:` paths work with java.exe.
+    strip_extended_prefix(raw)
+}
+
+fn strip_extended_prefix(p: PathBuf) -> PathBuf {
+    let s = p.to_string_lossy();
+    if let Some(rest) = s.strip_prefix(r"\\?\") {
+        PathBuf::from(rest)
+    } else {
+        p
+    }
+}
+
+pub fn force_extract_native() -> Option<PathBuf> {
+    if !HAS_EMBEDDED_NATIVE || EMBEDDED_NATIVE.is_empty() {
+        return None;
+    }
+    let dest = native_cache_path();
+    let _ = ensure_dir(dest.parent()?);
+    let needs_write = !dest.is_file()
+        || fs::metadata(&dest)
+            .map(|m| m.len() as usize != EMBEDDED_NATIVE.len())
+            .unwrap_or(true);
+    if needs_write {
+        let pb = ProgressBar::new(EMBEDDED_NATIVE.len() as u64);
+        pb.set_style(
+            ProgressStyle::with_template(
+                "{spinner:.magenta} {msg} [{bar:40.cyan/blue}] {bytes}/{total_bytes}",
+            )
+            .unwrap()
+            .progress_chars("█▓░"),
+        );
+        pb.set_message(format!("Extracting {NATIVE_NAME}"));
+        pb.enable_steady_tick(Duration::from_millis(80));
+        fs::write(&dest, EMBEDDED_NATIVE).ok()?;
+        pb.finish_with_message(format!("Extracted {}", dest.display()));
+    }
+    Some(absolute(&dest))
+}
+
 pub fn resolve_or_extract_native(project: &Path) -> Option<PathBuf> {
     if let Ok(env) = std::env::var("JAVAR_NATIVE_PATH") {
         let p = PathBuf::from(env);
         if p.is_file() {
-            return Some(p.canonicalize().unwrap_or(p));
+            return Some(absolute(&p));
         }
     }
 
@@ -152,27 +180,14 @@ pub fn resolve_or_extract_native(project: &Path) -> Option<PathBuf> {
         let dest = native_cache_path();
         let _ = ensure_dir(dest.parent().unwrap());
         let _ = fs::copy(&local, &dest);
-        return Some(local);
+        return Some(absolute(&local));
     }
 
     let cached = native_cache_path();
     if cached.is_file() {
-        return Some(cached.canonicalize().unwrap_or(cached));
+        return Some(absolute(&cached));
     }
     None
-}
-
-fn find_local_agent(project: &Path) -> Option<PathBuf> {
-    let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-    let candidates = [
-        cwd.join("../javar-agent/target/javar-agent.jar"),
-        project.join("../javar-agent/target/javar-agent.jar"),
-        crate::workspace_root(project).join("javar-agent/target/javar-agent.jar"),
-        crate::workspace_root(project).join("javar-agent/target/javar-agent-0.1.0.jar"),
-        project.join("lib/javar-agent.jar"),
-        cwd.join("lib/javar-agent.jar"),
-    ];
-    candidates.into_iter().find(|p| p.is_file())
 }
 
 fn find_local_native(project: &Path) -> Option<PathBuf> {
@@ -198,7 +213,7 @@ fn find_local_native(project: &Path) -> Option<PathBuf> {
         for name in names {
             let p = dir.join(name);
             if p.is_file() {
-                return Some(p.canonicalize().unwrap_or(p));
+                return Some(p);
             }
         }
     }

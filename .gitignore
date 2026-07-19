@@ -20,6 +20,7 @@ javar-project/javar-vscode/out/
 .javar/
 **/javar-cli/embedded/
 **/dist/
+**/.tools/
 /javar-linux-*/
 /javar-windows-*/
 /javar-macos-*/

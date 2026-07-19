@@ -42,9 +42,18 @@ fn draw_header(frame: &mut Frame, area: Rect, app: &App) {
     } else {
         Span::styled("○ OFFLINE", Style::default().fg(ORANGE))
     };
+    let project = if app.agent.telemetry.project_name.is_empty() {
+        Span::raw("")
+    } else {
+        Span::styled(
+            format!("「{}」 ", app.agent.telemetry.project_name),
+            Style::default().fg(CYAN).add_modifier(Modifier::BOLD),
+        )
+    };
     let title = Paragraph::new(Line::from(vec![
         Span::styled(" JavaR ", Style::default().fg(ORANGE).add_modifier(Modifier::BOLD)),
         Span::styled("Control Center ", Style::default().fg(Color::White)),
+        project,
         status,
         Span::raw("  "),
         Span::styled(app.agent_addr.clone(), Style::default().fg(DIM)),

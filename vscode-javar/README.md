@@ -27,28 +27,29 @@ JavaR itself is a **Rust sidecar + Java agent**. This extension is the VS Code c
 
 ## Prerequisites
 
-1. **JavaR CLI** on your `PATH` (or set `javar.cliPath`)
-2. A Java app started with the JavaR agent — typically via `javar run` (smart launch)
-3. A Java project (optionally with `javar.toml`)
+1. A Java / Maven / **Spring Boot** project
+2. The **JavaR CLI** — installed automatically by the extension when missing  
+   (or set `javar.cliPath` / use the installers below)
 
 ### Install the CLI
 
-**Windows (PowerShell):**
+**Automatic (recommended):** open a Java workspace and accept **Install** when prompted,  
+or run **JavaR: Install / Repair CLI** from the Command Palette.
+
+**Manual — Windows (PowerShell):**
 
 ```powershell
 iwr https://javar.dev/install.ps1 | iex
-# or: irm https://raw.githubusercontent.com/rabbittrix/JavaR/main/scripts/install.ps1 | iex
 ```
 
-**Linux / macOS:**
+**Manual — Linux / macOS:**
 
 ```bash
 curl -fsSL https://javar.dev/install.sh | sh
-# or: curl -fsSL https://raw.githubusercontent.com/rabbittrix/JavaR/main/scripts/install.sh | sh
 ```
 
-The installer places the binary in `~/.javar/bin` and runs `javar setup`, which  
-**force-extracts** the embedded `javar-agent.jar` + native lib (no manual `-javaagent` path).
+`javar setup` extracts the embedded agent + native lib, bootstraps **Maven** into  
+`~/.javar/tools` when needed, and adds `~/.javar/bin` (with an `mvn` shim) to your PATH.
 
 ---
 
@@ -56,9 +57,10 @@ The installer places the binary in `~/.javar/bin` and runs `javar setup`, which
 
 ### 1. Run your app with the JavaR CLI
 
-`javar run` is smart: it extracts the embedded agent if needed, detects Maven/Gradle,  
-finds `target/classes` or `build/classes`, locates a `public static void main` if you omit one,  
-and starts the JVM with `-javaagent:<absolute path>` plus the native library path.
+`javar run` extracts the embedded agent if needed, detects Maven / Gradle / **Spring Boot**,  
+auto-installs Maven when missing, builds if needed, and launches with `-javaagent`.  
+Spring Boot apps prefer `java -jar target/*-*.jar`. The **project name** appears in the  
+status bar and Control Center.
 
 ```bash
 # Full smart launch (agent + native + -cp + discovered Main)
@@ -141,6 +143,7 @@ export JAVAR_NATIVE_PATH=/path/to/libjavar_core.so   # or .dylib
 | JavaR: Start CLI / Core | `javar.startCli` | `javar run <folder> --watch-only --port <N>` |
 | JavaR: Open Control Center (TUI) | `javar.openDashboard` | `javar dashboard --addr 127.0.0.1:<N>` |
 | JavaR: Connect Agent | `javar.connect` | Open TCP telemetry to agent |
+| JavaR: Install / Repair CLI | `javar.installCli` | Download CLI into `~/.javar/bin` + setup |
 
 ---
 
@@ -154,6 +157,7 @@ Open **Settings → Extensions → JavaR**:
 | `javar.agentHost` | `127.0.0.1` | Agent TCP host |
 | `javar.agentPort` | `19222` | Agent TCP port |
 | `javar.autoStart` | `true` | Auto-run `javar run --watch-only` when a workspace opens |
+| `javar.autoInstallCli` | `true` | Offer to install the CLI when it is missing |
 
 ---
 

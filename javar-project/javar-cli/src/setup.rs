@@ -14,16 +14,10 @@ pub fn cmd_setup() -> Result<()> {
     style::header("JavaR setup");
     style::banner_line(format!("OS: {} / {}", env::consts::OS, env::consts::ARCH));
 
-    // Force-extract embedded agent + native into ~/.javar/bin.
-    match embed::force_extract_agent() {
+    // If ~/.javar/bin/javar-agent.jar is missing, write AGENT_BYTES immediately.
+    match embed::ensure_agent_jar(None) {
         Ok(agent) => style::ok(format!("Agent → {}", agent.display())),
-        Err(e) => {
-            let cwd = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-            match embed::resolve_or_extract_agent(&cwd, None) {
-                Ok(agent) => style::ok(format!("Agent → {}", agent.display())),
-                Err(_) => style::warn_line(format!("Agent: {e:#}")),
-            }
-        }
+        Err(e) => style::warn_line(format!("Agent: {e:#}")),
     }
     match embed::force_extract_native() {
         Some(n) => style::ok(format!("Native → {}", n.display())),
@@ -42,7 +36,15 @@ pub fn cmd_setup() -> Result<()> {
     style::info_line(format!("Binary: {}", exe.display()));
 
     install_binary_copy(&exe)?;
-    add_to_path(&embed::javar_bin_dir())?;
+    install_core_sidecar()?;
+    prepend_user_path(&embed::javar_bin_dir())?;
+
+    // Maven for app builds: bootstrap under ~/.javar/tools + shim on PATH.
+    let cwd = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    match crate::maven::ensure_maven_installed(&cwd) {
+        Ok(p) => style::ok(format!("Maven → {}", p.display())),
+        Err(e) => style::warn_line(format!("Maven bootstrap: {e:#}")),
+    }
 
     check_tool("java", &["-version"]);
     check_tool_maven();
@@ -52,32 +54,117 @@ pub fn cmd_setup() -> Result<()> {
     Ok(())
 }
 
-fn install_binary_copy(exe: &Path) -> Result<()> {
-    let dest_dir = embed::javar_bin_dir();
-    fs::create_dir_all(&dest_dir)?;
-    let dest_name = if cfg!(windows) { "javar.exe" } else { "javar" };
-    let dest = dest_dir.join(dest_name);
-    if exe.canonicalize().ok().as_ref() == dest.canonicalize().ok().as_ref() {
-        style::info_line("CLI already installed in ~/.javar/bin");
-        return Ok(());
+fn install_core_sidecar() -> Result<()> {
+    let dest_name = if cfg!(windows) {
+        "javar-core.exe"
+    } else {
+        "javar-core"
+    };
+    let dest = embed::javar_bin_dir().join(dest_name);
+    let _ = fs::create_dir_all(embed::javar_bin_dir());
+
+    let candidates = [
+        env::current_exe()
+            .ok()
+            .and_then(|p| p.parent().map(|d| d.join(dest_name))),
+        env::current_dir().ok().map(|d| {
+            d.join("target")
+                .join("release")
+                .join(dest_name)
+        }),
+        // Typical layout when run from javar-project/
+        Some(PathBuf::from("target/release").join(dest_name)),
+        Some(PathBuf::from("../target/release").join(dest_name)),
+    ];
+
+    for src in candidates.into_iter().flatten() {
+        if !src.is_file() {
+            continue;
+        }
+        match fs::copy(&src, &dest) {
+            Ok(_) => {
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::PermissionsExt;
+                    if let Ok(meta) = fs::metadata(&dest) {
+                        let mut perms = meta.permissions();
+                        perms.set_mode(0o755);
+                        let _ = fs::set_permissions(&dest, perms);
+                    }
+                }
+                style::ok(format!("Sidecar → {}", dest.display()));
+                return Ok(());
+            }
+            Err(e) => style::warn_line(format!("Could not copy sidecar from {}: {e}", src.display())),
+        }
     }
-    fs::copy(exe, &dest).with_context(|| format!("copy {} → {}", exe.display(), dest.display()))?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let mut perms = fs::metadata(&dest)?.permissions();
-        perms.set_mode(0o755);
-        fs::set_permissions(&dest, perms)?;
+
+    if dest.is_file() {
+        style::info_line(format!("Sidecar already at {}", dest.display()));
+    } else {
+        style::warn_line(
+            "javar-core sidecar not found — build with: cargo build --release -p javar-core",
+        );
     }
-    style::ok(format!("Installed CLI → {}", dest.display()));
     Ok(())
 }
 
-fn add_to_path(bin_dir: &Path) -> Result<()> {
+fn install_binary_copy(exe: &Path) -> Result<()> {
+    let dest_name = if cfg!(windows) { "javar.exe" } else { "javar" };
+    let mut targets = vec![embed::javar_bin_dir().join(dest_name)];
+
+    // Overwrite stale `cargo install` copies that often win on PATH.
+    if let Ok(home) = env::var("USERPROFILE").or_else(|_| env::var("HOME")) {
+        targets.push(PathBuf::from(home).join(".cargo").join("bin").join(dest_name));
+    }
+    if let Ok(cargo_home) = env::var("CARGO_HOME") {
+        targets.push(PathBuf::from(cargo_home).join("bin").join(dest_name));
+    }
+
+    let exe_canon = exe.canonicalize().unwrap_or_else(|_| exe.to_path_buf());
+    for dest in targets {
+        if let Some(parent) = dest.parent() {
+            let _ = fs::create_dir_all(parent);
+        }
+        if exe_canon == dest.canonicalize().unwrap_or_default() {
+            style::info_line(format!("CLI already at {}", dest.display()));
+            continue;
+        }
+        // Only replace existing cargo-bin javar, or always write ~/.javar/bin.
+        let is_javar_home = dest.starts_with(embed::javar_bin_dir());
+        if !is_javar_home && !dest.is_file() {
+            continue;
+        }
+        match fs::copy(exe, &dest) {
+            Ok(_) => {
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::PermissionsExt;
+                    if let Ok(meta) = fs::metadata(&dest) {
+                        let mut perms = meta.permissions();
+                        perms.set_mode(0o755);
+                        let _ = fs::set_permissions(&dest, perms);
+                    }
+                }
+                style::ok(format!("Installed CLI → {}", dest.display()));
+            }
+            Err(e) => style::warn_line(format!("Could not install to {}: {e}", dest.display())),
+        }
+    }
+    Ok(())
+}
+
+/// Prepend a directory to the user PATH (Windows registry / shell rc).
+pub(crate) fn prepend_user_path(bin_dir: &Path) -> Result<()> {
     let bin = bin_dir
         .canonicalize()
         .unwrap_or_else(|_| bin_dir.to_path_buf());
-    let bin_str = bin.display().to_string();
+    let bin_str = bin.to_string_lossy();
+    // Windows canonicalize may yield `\\?\C:\…` which breaks PATH / tools.
+    let bin_str = bin_str
+        .strip_prefix(r"\\?\")
+        .unwrap_or(&bin_str)
+        .to_string();
 
     #[cfg(windows)]
     {
@@ -103,15 +190,16 @@ fn add_to_path_windows(bin: &str) -> Result<()> {
         style::info_line("User PATH already contains ~/.javar/bin");
         return Ok(());
     }
-    let new_path = if current.is_empty() {
-        bin.to_string()
-    } else if current.ends_with(';') {
-        format!("{current}{bin}")
-    } else {
-        format!("{current};{bin}")
-    };
+    // Prepend so ~/.javar/bin wins over a stale ~/.cargo/bin/javar.
+    let rest: Vec<&str> = parts
+        .into_iter()
+        .filter(|p| !p.eq_ignore_ascii_case(bin))
+        .collect();
+    let new_path = std::iter::once(bin)
+        .chain(rest)
+        .collect::<Vec<_>>()
+        .join(";");
     env.set_value("Path", &new_path)?;
-    // Broadcast WM_SETTINGCHANGE so new shells pick it up (best-effort).
     let _ = Command::new("powershell")
         .args([
             "-NoProfile",
@@ -119,8 +207,8 @@ fn add_to_path_windows(bin: &str) -> Result<()> {
             "[Environment]::SetEnvironmentVariable('Path',[Environment]::GetEnvironmentVariable('Path','User'),'User')",
         ])
         .status();
-    style::ok(format!("Added to user PATH: {bin}"));
-    style::info_line("Restart the terminal (or log out/in) for PATH to apply");
+    style::ok(format!("Prepended to user PATH: {bin}"));
+    style::info_line("Restart the terminal for PATH to apply");
     Ok(())
 }
 
@@ -188,21 +276,11 @@ fn check_tool(name: &str, args: &[&str]) {
 }
 
 fn check_tool_maven() {
-    let mvn = if which::which("mvn").is_ok() {
-        Some("mvn")
-    } else if cfg!(windows) && which::which("mvn.cmd").is_ok() {
-        Some("mvn.cmd")
-    } else {
-        None
-    };
-    match mvn {
-        Some(m) => {
-            if let Ok(p) = which::which(m) {
-                style::ok(format!("maven found ({})", p.display()));
-            }
-        }
-        None => style::warn_line(
-            "maven not found — optional for app builds; `javar run` will prompt when needed",
+    let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    match crate::maven::resolve_mvn(&cwd) {
+        Ok(p) => style::ok(format!("maven found ({})", p.display())),
+        Err(_) => style::warn_line(
+            "maven not found — `javar run` / `javar build` will locate or bootstrap it",
         ),
     }
 }

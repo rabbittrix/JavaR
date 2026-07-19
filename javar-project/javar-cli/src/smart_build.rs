@@ -21,6 +21,7 @@ pub fn cmd_build(root: &Path) -> Result<()> {
             if !project.root.join("pom.xml").is_file() {
                 bail!("no pom.xml in {}", project.root.display());
             }
+            let _ = crate::maven::ensure_maven_installed(&project.root)?;
             run_maven_package(&project.root)?;
         }
         BuildSystem::Gradle => {
@@ -45,14 +46,19 @@ pub fn cmd_build(root: &Path) -> Result<()> {
     Ok(())
 }
 
-/// If this is a Maven/Gradle project without usable classes, offer to build.
+/// If this is a Maven/Gradle project without usable classes (or a Spring Boot
+/// fat jar), offer to build.
 pub fn ensure_project_built(project: &SmartProject, assume_yes: bool) -> Result<SmartProject> {
-    let needs_build = match project.classes_dir.as_ref() {
+    let missing_classes = match project.classes_dir.as_ref() {
         None => true,
         Some(dir) => !dir_has_classes(dir),
     };
+    let spring = project.build == BuildSystem::Maven
+        && crate::smart_run::is_spring_boot(&project.root);
+    let missing_boot_jar =
+        spring && crate::smart_run::find_spring_boot_jar(&project.root).is_none();
 
-    if !needs_build {
+    if !missing_classes && !missing_boot_jar {
         return Ok(SmartProject::discover(&project.root));
     }
 
@@ -61,10 +67,13 @@ pub fn ensure_project_built(project: &SmartProject, assume_yes: bool) -> Result<
             if !project.root.join("pom.xml").is_file() {
                 return Ok(SmartProject::discover(&project.root));
             }
-            if !confirm(
-                "Maven project not built (no target/classes). Build now? (Y/n) ",
-                assume_yes,
-            )? {
+            let _ = crate::maven::ensure_maven_installed(&project.root);
+            let prompt = if missing_boot_jar {
+                "Spring Boot project not packaged (no executable jar). Build now? (Y/n) "
+            } else {
+                "Maven project not built (no target/classes). Build now? (Y/n) "
+            };
+            if !confirm(prompt, assume_yes)? {
                 style::warn_line("Skipping build — javar run may fail without classes.");
                 return Ok(SmartProject::discover(&project.root));
             }
@@ -113,24 +122,11 @@ fn confirm(prompt: &str, assume_yes: bool) -> Result<bool> {
 
 /// `mvn -DskipTests clean package` as separate argv (no shell).
 fn run_maven_package(root: &Path) -> Result<()> {
-    let mvn = resolve_mvn()?;
-    style::banner_line(format!("{mvn} -DskipTests clean package"));
-    let pb = spinner("mvn package");
-    // Single Maven invocation — goals are argv, never `clean && package` in a shell.
-    let status = Command::new(&mvn)
-        .args(["-B", "-DskipTests", "clean", "package"])
-        .current_dir(root)
-        .stdin(Stdio::null())
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
-        .status()
-        .with_context(|| {
-            format!("failed to spawn `{mvn}` — install Maven and ensure it is on PATH")
-        })?;
+    style::banner_line("Building project via internal Maven caller");
+    let pb = spinner("internal Maven caller");
+    let result = crate::maven::run_maven(root, &["-B", "-DskipTests", "clean", "package"]);
     pb.finish_and_clear();
-    if !status.success() {
-        bail!("Maven package failed ({status}). Fix the project, then run:  javar build");
-    }
+    result?;
     style::ok("Maven package finished");
     Ok(())
 }
@@ -153,18 +149,6 @@ fn run_gradle_build(root: &Path) -> Result<()> {
     }
     style::ok("Gradle build finished");
     Ok(())
-}
-
-fn resolve_mvn() -> Result<String> {
-    if cfg!(windows) {
-        if which::which("mvn.cmd").is_ok() {
-            return Ok("mvn.cmd".into());
-        }
-    }
-    if which::which("mvn").is_ok() {
-        return Ok("mvn".into());
-    }
-    bail!("Maven not found on PATH. Install Maven, then run:  javar build");
 }
 
 fn resolve_gradle(root: &Path) -> Result<String> {

@@ -26,6 +26,8 @@ pub struct AgentTelemetry {
     pub loaded_classes: u64,
     #[serde(default)]
     pub offheap_backend: String,
+    #[serde(default)]
+    pub project_name: String,
 }
 
 #[derive(Debug, Clone)]
@@ -87,15 +89,21 @@ fn poll_inner(addr: &str) -> Result<AgentSnapshot> {
 
     Ok(AgentSnapshot {
         connected: true,
-        detail: format!(
-            "backend={} reloads={}",
-            if telemetry.offheap_backend.is_empty() {
+        detail: {
+            let backend = if telemetry.offheap_backend.is_empty() {
                 "?"
             } else {
-                &telemetry.offheap_backend
-            },
-            telemetry.reload_count
-        ),
+                telemetry.offheap_backend.as_str()
+            };
+            if telemetry.project_name.is_empty() {
+                format!("backend={backend} reloads={}", telemetry.reload_count)
+            } else {
+                format!(
+                    "project={}  backend={backend} reloads={}",
+                    telemetry.project_name, telemetry.reload_count
+                )
+            }
+        },
         telemetry,
     })
 }
