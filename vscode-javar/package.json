@@ -1,0 +1,110 @@
+{
+  "name": "javar",
+  "displayName": "JavaR Cockpit",
+  "description": "Zero-Restart Java — hot-reload, off-heap telemetry, and javar CLI integration",
+  "version": "0.1.0",
+  "publisher": "rabbittrix",
+  "author": {
+    "name": "Roberto de Souza",
+    "email": "rabbittrix@hotmail.com"
+  },
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/rabbittrix/JavaR"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Other", "Debuggers"],
+  "icon": "media/icon.png",
+  "activationEvents": [
+    "onLanguage:java",
+    "workspaceContains:javar.toml",
+    "onCommand:javar.forceResync",
+    "onCommand:javar.startCli"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "javar.forceResync",
+        "title": "JavaR: Force Re-sync",
+        "icon": "$(sync)"
+      },
+      {
+        "command": "javar.startCli",
+        "title": "JavaR: Start CLI / Core"
+      },
+      {
+        "command": "javar.openDashboard",
+        "title": "JavaR: Open Control Center (TUI)"
+      },
+      {
+        "command": "javar.connect",
+        "title": "JavaR: Connect Agent"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "javar.forceResync",
+          "when": "resourceExtname == .java",
+          "group": "navigation"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "JavaR",
+      "properties": {
+        "javar.cliPath": {
+          "type": "string",
+          "default": "javar",
+          "description": "Path to the javar CLI (must be on PATH or absolute)"
+        },
+        "javar.agentHost": {
+          "type": "string",
+          "default": "127.0.0.1"
+        },
+        "javar.agentPort": {
+          "type": "number",
+          "default": 19222
+        },
+        "javar.autoStart": {
+          "type": "boolean",
+          "default": true,
+          "description": "Auto-start javar run when opening a JavaR project"
+        }
+      }
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "javar-cockpit",
+          "title": "JavaR",
+          "icon": "media/logo.svg"
+        }
+      ]
+    },
+    "views": {
+      "javar-cockpit": [
+        {
+          "id": "javar.regions",
+          "name": "Off-Heap Regions"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "vsce package --no-dependencies"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.2.1",
+    "typescript": "^5.3.3"
+  }
+}

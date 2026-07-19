@@ -1,278 +1,175 @@
-# JavaR
+<!-- include BANNER.md branding -->
 
-**High-Performance Java Accelerator & Hot-Reload Engine**
-
-JavaR is a hybrid system where a **Rust core** runs as a sidecar/agent beside the JVM to deliver:
-
-1. **Structural Hot-Reloading** — change fields, methods, and classes without restarting the JVM  
-2. **Off-Heap Memory Management** — keep heavy data structures in Rust and bypass Java GC pauses (Phase 2)  
-3. **Instant Rollback** — state-tracking to revert failed code changes in milliseconds  
-
-**Author:** Roberto de Souza (`rabbittrix@hotmail.com`)
-
----
-
-## Logo
-
-A modern, “addictive” mark: a stylized **R** fused with a Duke-inspired silhouette, neon orange → rust-red, on a dark stage — suggesting speed, hot metal, and the Java ↔ Rust bond.
+```text
+     ██╗ █████╗ ██╗   ██╗ █████╗ ██████╗
+     ██║██╔══██╗██║   ██║██╔══██╗██╔══██╗
+     ██║███████║██║   ██║███████║██████╔╝
+██   ██║██╔══██║╚██╗ ██╔╝██╔══██║██╔══██╗
+╚█████╔╝██║  ██║ ╚████╔╝ ██║  ██║██║  ██║
+ ╚════╝ ╚═╝  ╚═╝  ╚═══╝  ╚═╝  ╚═╝╚═╝  ╚═╝
+```
 
 <p align="center">
-  <img src="javar-project/docs/assets/javar-logo.svg" alt="JavaR logo" width="220" />
+  <img src="docs/assets/logo.svg" alt="JavaR logo" width="200"/>
+</p>
+
+<p align="center">
+  <b>Zero-Restart Java</b> — structural hot-reload · Rust off-heap · invisible GC bypass<br/>
+  by <b>Roberto de Souza</b> (<a href="mailto:rabbittrix@hotmail.com">rabbittrix@hotmail.com</a>)
 </p>
 
 ---
 
-## Architecture
+# JavaR
 
-```text
-┌─────────────────┐     watch .java/.class      ┌──────────────────┐
-│   javar-core    │ ───────────────────────────▶│  compile (javac) │
-│  (Rust sidecar) │                             └────────┬─────────┘
-└────────┬────────┘                                      │ bytecode
-         │ TCP / JNI (zero-copy frames)                  ▼
-         ▼                                      ┌──────────────────┐
-┌─────────────────┐     redefineClasses         │  javar-agent     │
-│  IDE / javar    │◀── telemetry ───────────────│  (Java Agent)    │
-│  VS Code ext    │                             └──────────────────┘
-└─────────────────┘                                      │
-                                                         ▼
-                                                ┌──────────────────┐
-                                                │      JVM         │
-                                                └──────────────────┘
-```
+**High-Performance Java Accelerator & Hot-Reload Engine**
 
-| Component | Role |
-|-----------|------|
-| `javar-core` | File watching (`notify`), compile orchestration, rollback store, off-heap scaffold |
-| `javar-agent` | `java.lang.instrument` agent — `redefineClasses`, socket server, telemetry |
-| `javar-cli` | IDE-agnostic CLI (`javar init`, `run`, `status`) |
-| `javar-vscode` | VS Code extension — Hot Deploy button + memory telemetry |
+JavaR pairs a **Rust sidecar** with a **Java agent** so you can change running code and keep heavy data out of the GC — without restarting the JVM.
 
-**Java support:** 8 → latest LTS (21+)  
-**Platforms:** Linux, Windows, macOS  
-**IDE-agnostic:** core is a CLI/agent usable from IntelliJ, Eclipse, or VS Code
+1. **Structural Hot-Reloading** — add fields/methods via shadow classes (`Original$JavaR_vN`)  
+2. **Off-Heap Memory** — `@JavaRManaged` stores primitives in Rust (`javar_mem_*`)  
+3. **Instant Rollback** — version stack for failed reloads  
+4. **Control Center** — `javar dashboard` (ratatui TUI)
 
 ---
 
-## Raise the project
+## Getting Started
 
 ### Prerequisites
 
-- Rust (`rustup`)
-- JDK 8+ (JDK 22+ recommended for Project Panama)
-- Maven 3.8+ (for `javar-agent`)
+- Rust (`rustup`), JDK 8+ (22+ for Panama), Maven 3.8+
 
-### From source (this repo)
+### Build
 
 ```powershell
 cd javar-project
-
 cargo build --release -p javar-cli -p javar-core
 cd javar-agent
 mvn -DskipTests package
 cd ..
-
-# Optional: install CLI onto PATH
 cargo install --path javar-cli
 ```
 
-### One-liner (Unix / macOS)
+### Highlight: `@JavaRManaged`
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/rabbittrix/javar/main/javar-project/scripts/install.sh | sh
-```
-
-Then add `~/.javar/bin` to your `PATH`.
-
-### Windows (PowerShell)
-
-```powershell
-# from repo root:
-.\javar-project\scripts\install.ps1
-```
-
----
-
-## Quick start
-
-```powershell
-cd javar-project
-
-# 1. Scaffold
-javar init ..\demo-app
-cd ..\demo-app
-
-# 2. Start your JVM with the agent (flags printed by `javar run --flags-only`)
-javar run --flags-only
-# java -javaagent:...\javar-agent-0.1.0.jar=port=19222 -cp ... com.example.HelloJavaR
-
-# 3. In another terminal — start the Rust sidecar
-javar run
-
-# 4. Probe health / telemetry
-javar status
-```
-
-Edit a `.java` file, save, and JavaR compiles + pushes bytecode to the agent.
-
-Native library (off-heap Panama/JNI), when needed:
-
-```powershell
-# After: cargo build -p javar-core  (from javar-project/)
-$env:JAVAR_NATIVE_PATH = "$PWD\target\release\javar_core.dll"
-```
-
----
-
-## Commands
-
-| Command | Description |
-|---------|-------------|
-| `javar init [path]` | Create `javar.toml` and a sample `HelloJavaR` app |
-| `javar run [path]` | Print JVM inject flags and start `javar-core` watching the project |
-| `javar run --flags-only` | Only print `-javaagent` / env flags |
-| `javar run --port 19222` | Choose agent port |
-| `javar status` | Ping the agent and print heap vs JavaR-managed memory |
-
-Environment variables:
-
-| Variable | Default | Meaning |
-|----------|---------|---------|
-| `JAVAR_AGENT_ADDR` | `127.0.0.1:19222` | Core → agent address |
-| `JAVAR_AGENT_PORT` | `19222` | Agent listen port |
-| `JAVAR_NATIVE_PATH` | — | Absolute path to `javar_core` shared library |
-
----
-
-## Hot-reload flow
-
-1. **Watch** — `javar-core` debounces `notify` events on `.java` / `.class`  
-2. **Compile** — sources go through background `javac`; `.class` files are mmap’d  
-3. **Schema check (Rust)** — class-file field/method sets are compared; compatible vs structural  
-4. **Compatible** — agent calls `Instrumentation.redefineClasses` (method bodies only)  
-5. **Structural (shadow class)** — see below  
-6. **Rollback** — Rust `ShadowRegistry` keeps prior versions for instant revert  
-
-### Structural hot-swap (shadow classes)
-
-The JVM forbids changing a *loaded* class’s schema. JavaR bypasses that without restarting:
-
-1. Rust detects a structural change and assigns `Original$JavaR_vN`
-2. Agent **defines a new class** with that name (always allowed) holding the new fields/methods  
-3. ByteBuddy rewrites only the **method bodies** of `Original` to call `JavaRDispatcher` (schema of `Original` unchanged → HotSwap-legal)  
-4. Live instances keep type `Original`; each gets a shadow *twin* for new state  
-
-```text
-Caller → Original.foo()  ──dispatch──▶  Original$JavaR_v2.foo()
-              │                              │
-         (frozen schema)              (new fields/methods)
-```
-
----
-
-## VS Code extension
-
-```powershell
-cd javar-project\javar-vscode
-npm install
-npm run compile
-# F5 in VS Code, or: npx vsce package
-```
-
-Features:
-
-- Connects to the local JavaR agent socket (`javar.coreHost` / `javar.corePort`)
-- **JavaR: Hot Deploy** command + editor title flame button
-- **Memory Telemetry** view — Java Heap vs JavaR Managed Memory
-- Status bar live counters
-
----
-
-## Workspace layout
-
-```text
-Project_JavaR/                 ← repo root (this README)
-├── README.md
-└── javar-project/             ← Cargo workspace + agent + VS Code ext
-    ├── Cargo.toml
-    ├── javar-core/            ← Rust sidecar (watcher, bridge, protocol, memory)
-    ├── javar-cli/             ← `javar` binary
-    ├── javar-agent/           ← Java Instrumentation agent (Maven)
-    ├── javar-vscode/          ← VS Code extension
-    ├── scripts/               ← install.sh / install.ps1
-    └── docs/assets/           ← logo SVG
-```
-
-### Off-heap zero-copy bridge (Panama / JNI)
-
-Rust owns off-heap regions (`javar_mem_*` C ABI in `javar-project/javar-core/include/javar_mem.h`). The JVM attaches without copying:
-
-| JDK | Backend | Mechanism |
-|-----|---------|-----------|
-| **22+** | Project Panama | `Linker.downcallHandle` + `MemorySegment.ofAddress(…).reinterpret(…)` |
-| **8–21** | JNI fallback | `NewDirectByteBuffer` over the same Rust pointer |
-
-```java
-OffHeapBridge mem = JavaRAgent.getOffHeap(); // or OffHeapBridgeFactory.get()
-long id = mem.allocate(1 << 20, 8);
-ByteBuffer view = mem.asByteBuffer(id);      // zero-copy
-// Java 22+: ((PanamaOffHeapBridge) mem).asSegment(id)
-mem.free(id);
-```
-
-Load the native library with `-Djavar.native.path=/path/to/javar_core.dll` (or `libjavar_core.so` / `.dylib`), or put it on `java.library.path`. Build the agent on JDK 22+ to include the Multi-Release Panama classes (`META-INF/versions/22/`).
-
-### Transparent `@JavaRManaged` (GC elimination)
-
-Annotate a class; the agent rewrites primitive `GETFIELD`/`PUTFIELD` to Rust-backed storage. The Java object keeps only a region id (tiny shell).
+Annotate a class — the agent rewrites primitive field access to Rust off-heap memory. The Java object stays a tiny shell.
 
 ```java
 import com.javar.agent.managed.JavaRManaged;
 
 @JavaRManaged
 public class SensorReading {
-    private int temperature; // off-heap
-    private long timestamp;  // off-heap
-    private String label;    // still on-heap (reference)
+    private int temperature; // off-heap (Rust)
+    private long timestamp;  // off-heap (Rust)
+    private String label;    // reference stays on-heap
 }
 ```
 
-Run with `-javaagent:javar-agent.jar`. Telemetry exposes `javar_managed`, `gc_savings`, and `managed_regions`.
+```powershell
+# Terminal A — your app with the agent
+java "-javaagent:javar-agent\target\javar-agent-0.1.0.jar=port=19222" -cp ... com.example.Main
 
-### CI / cross-platform releases
+# Terminal B — watcher / sidecar
+javar run
 
-GitHub Actions (`.github/workflows/build.yml`) builds:
-
-| Target | Archive | Runner |
-|--------|---------|--------|
-| Linux x86_64 | `javar-linux-x86_64.zip` | `ubuntu-latest` |
-| Windows x86_64 | `javar-windows-x86_64.zip` | `windows-latest` |
-| macOS Intel | `javar-macos-x86_64.zip` | `macos-14` (cross-compile) |
-| macOS Apple Silicon | `javar-macos-aarch64.zip` | `macos-14` |
-
-Each zip contains `bin/javar`, `lib/*javar_core*`, and `agent/javar-agent.jar`. Tag `v*` to publish a GitHub Release.
-
----
-
-## Protocol (summary)
-
-Little-endian frames:
-
-```text
-[u32 magic=JAVR][u8 version=1][u8 kind][u32 payload_len][payload...]
+# Terminal C — Control Center
+javar dashboard
 ```
 
-Kinds: `Ping`, `Pong`, `Status`, `Error`, `Redefine`, `Rollback`, `Telemetry`, `HotDeploy`.
+| Command | Purpose |
+|---------|---------|
+| `javar init` | Scaffold project + `javar.toml` |
+| `javar run` | Print `-javaagent` flags + start core |
+| `javar status` | One-shot telemetry |
+| `javar dashboard` | Live TUI (heap vs off-heap, shadows, GC, logs) |
 
 ---
 
-## Author
+## Architecture
 
-**Roberto de Souza**  
-Email: [rabbittrix@hotmail.com](mailto:rabbittrix@hotmail.com)
+```text
+┌─────────────┐  watch .java/.class   ┌──────────────┐
+│ javar-core  │ ───────────────────▶  │ javac / mmap │
+│  (Rust)     │                       └──────┬───────┘
+└──────┬──────┘                              │
+       │ schema diff (compatible vs structural)
+       ▼
+┌─────────────┐   redefine / Structural(9)   ┌────────────────┐
+│ javar-cli   │◀────── telemetry ────────────│  javar-agent   │
+│ dashboard   │                              │ ByteBuddy+ASM  │
+└─────────────┘                              └────────┬───────┘
+                                                      ▼
+                                               ┌─────────────┐
+                                               │     JVM     │
+                                               └─────────────┘
+```
+
+### Shadow-class bypass (structural HotSwap)
+
+The JVM forbids changing a *loaded* class’s field/method set. JavaR does not fight that rule:
+
+1. **Rust** detects a structural schema change and assigns `Original$JavaR_vN`  
+2. **Agent** defines a **new** class with the new schema (always legal)  
+3. **ByteBuddy** rewrites only method *bodies* on `Original` → `JavaRDispatcher` (schema frozen → HotSwap-legal)  
+4. Live instances keep type `Original`; each gets a shadow twin for new state  
+
+```text
+Caller → Original.foo()  ──dispatch──▶  Original$JavaR_v2.foo()
+              │                              │
+         frozen schema                 new fields/methods
+```
+
+### Off-heap / Panama
+
+| JDK | Backend |
+|-----|---------|
+| 22+ | Project Panama FFM |
+| 8–21 | JNI `NewDirectByteBuffer` |
+
+Native lib: `-Djavar.native.path=` / `JAVAR_NATIVE_PATH`.
 
 ---
 
-## License
+## Control Center (TUI)
 
-Apache-2.0
+```bash
+javar dashboard --addr 127.0.0.1:19222
+# keys: q quit · ←/→ tabs · 1–4 jump · r refresh
+```
+
+- **Performance** — JVM heap vs JavaR off-heap chart; **sysinfo** JVM process table  
+- **Hot-Reload** — shadow/reload history + estimated restart time saved  
+- **GC Metrics** — `@JavaRManaged` regions & bytes kept off-heap  
+- **Logs** — live bytecode injection feed  
+
+---
+
+## VS Code Cockpit
+
+```bash
+cd vscode-javar
+npm install && npm run compile
+# F5 to launch Extension Development Host
+```
+
+- Status bar: `JavaR: Active · Heap … · Off-heap …`  
+- **JavaR: Force Re-sync** — save + HotDeploy nudge  
+- Auto-finds `javar` on `PATH` and can `javar run` the workspace  
+- Sidebar: off-heap region summary  
+
+Icon: `docs/assets/icon.png` · Logo: `docs/assets/logo.svg` · Banner: [`BANNER.md`](BANNER.md)
+
+---
+
+## CI / Releases
+
+[`.github/workflows/build.yml`](.github/workflows/build.yml) builds Linux, Windows, and macOS (arm64 + x86_64 cross-compile on `macos-14`). Tag `v*` to publish zips with CLI + native lib + agent JAR.
+
+---
+
+## Vision
+
+> **Zero-Restart Java** — keep the JVM warm, move weight into Rust, and ship feedback loops measured in milliseconds, not minutes.
+
+**Author:** Roberto de Souza · `rabbittrix@hotmail.com`  
+**License:** Apache-2.0

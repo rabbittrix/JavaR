@@ -1,4 +1,6 @@
-//! JavaR CLI — orchestrate build, agent injection, and core sidecar.
+//! JavaR CLI — orchestrate build, agent injection, Control Center TUI.
+
+mod dashboard;
 
 use anyhow::{bail, Context, Result};
 use bytes::Bytes;
@@ -48,16 +50,29 @@ enum Commands {
         #[arg(long, default_value = "127.0.0.1:19222")]
         addr: String,
     },
+    /// Open the JavaR Control Center (ratatui dashboard).
+    Dashboard {
+        #[arg(long, default_value = "127.0.0.1:19222")]
+        addr: String,
+    },
+    /// Alias for `dashboard`.
+    Tui {
+        #[arg(long, default_value = "127.0.0.1:19222")]
+        addr: String,
+    },
 }
 
 fn main() -> Result<()> {
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
-        )
-        .init();
-
     let cli = Cli::parse();
+    let is_tui = matches!(cli.command, Commands::Dashboard { .. } | Commands::Tui { .. });
+    if !is_tui {
+        tracing_subscriber::fmt()
+            .with_env_filter(
+                EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
+            )
+            .init();
+    }
+
     match cli.command {
         Commands::Init { path } => cmd_init(&path),
         Commands::Run {
@@ -66,6 +81,9 @@ fn main() -> Result<()> {
             flags_only,
         } => cmd_run(&path, port, flags_only),
         Commands::Status { addr } => cmd_status(&addr),
+        Commands::Dashboard { addr } | Commands::Tui { addr } => {
+            dashboard::run_dashboard(addr)
+        }
     }
 }
 
