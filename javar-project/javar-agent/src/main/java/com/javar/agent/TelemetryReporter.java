@@ -1,5 +1,6 @@
 package com.javar.agent;
 
+import com.javar.agent.managed.JavaRManagedRuntime;
 import com.javar.agent.memory.OffHeapBridge;
 
 import java.lang.instrument.Instrumentation;
@@ -48,6 +49,8 @@ public final class TelemetryReporter {
                 + "\"java_heap_used\":" + heap.getUsed() + ","
                 + "\"java_heap_max\":" + heap.getMax() + ","
                 + "\"javar_managed\":" + managed + ","
+                + "\"gc_savings\":" + JavaRManagedRuntime.gcSavingsBytes() + ","
+                + "\"managed_regions\":" + JavaRManagedRuntime.regionCount() + ","
                 + "\"reload_count\":" + reloadCount + ","
                 + "\"loaded_classes\":" + loaded + ","
                 + "\"offheap_backend\":\"" + backend + "\""
@@ -59,13 +62,14 @@ public final class TelemetryReporter {
         if (javarManagedBytesOverride >= 0) {
             return javarManagedBytesOverride;
         }
+        long fromRuntime = JavaRManagedRuntime.managedBytes();
         if (offHeap != null) {
             try {
-                return offHeap.managedBytes();
+                return Math.max(fromRuntime, offHeap.managedBytes());
             } catch (Throwable ignored) {
-                return 0L;
+                return fromRuntime;
             }
         }
-        return 0L;
+        return fromRuntime;
     }
 }

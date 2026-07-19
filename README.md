@@ -222,6 +222,36 @@ mem.free(id);
 
 Load the native library with `-Djavar.native.path=/path/to/javar_core.dll` (or `libjavar_core.so` / `.dylib`), or put it on `java.library.path`. Build the agent on JDK 22+ to include the Multi-Release Panama classes (`META-INF/versions/22/`).
 
+### Transparent `@JavaRManaged` (GC elimination)
+
+Annotate a class; the agent rewrites primitive `GETFIELD`/`PUTFIELD` to Rust-backed storage. The Java object keeps only a region id (tiny shell).
+
+```java
+import com.javar.agent.managed.JavaRManaged;
+
+@JavaRManaged
+public class SensorReading {
+    private int temperature; // off-heap
+    private long timestamp;  // off-heap
+    private String label;    // still on-heap (reference)
+}
+```
+
+Run with `-javaagent:javar-agent.jar`. Telemetry exposes `javar_managed`, `gc_savings`, and `managed_regions`.
+
+### CI / cross-platform releases
+
+GitHub Actions (`.github/workflows/build.yml`) builds:
+
+| Target | Archive |
+|--------|---------|
+| Linux x86_64 | `javar-linux-x86_64.zip` |
+| Windows x86_64 | `javar-windows-x86_64.zip` |
+| macOS Intel | `javar-macos-x86_64.zip` |
+| macOS Apple Silicon | `javar-macos-aarch64.zip` |
+
+Each zip contains `bin/javar`, `lib/*javar_core*`, and `agent/javar-agent.jar`. Tag `v*` to publish a GitHub Release.
+
 ---
 
 ## Protocol (summary)

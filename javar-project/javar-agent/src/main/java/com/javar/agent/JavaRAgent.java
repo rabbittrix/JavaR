@@ -1,5 +1,6 @@
 package com.javar.agent;
 
+import com.javar.agent.managed.ManagedClassTransformer;
 import com.javar.agent.memory.OffHeapBridge;
 import com.javar.agent.memory.OffHeapBridgeFactory;
 import com.javar.agent.shadow.ShadowClassManager;
@@ -52,11 +53,14 @@ public final class JavaRAgent {
         offHeap = OffHeapBridgeFactory.get();
         TelemetryReporter telemetry = new TelemetryReporter(inst, RELOAD_COUNT, offHeap);
 
+        // Transparent @JavaRManaged off-heap mapping (GETFIELD/PUTFIELD → Rust).
+        inst.addTransformer(new ManagedClassTransformer(), true);
+
         try {
             socketServer = new AgentSocketServer(options.port, redefiner, telemetry, RELOAD_COUNT);
             socketServer.start();
             LOG.info(String.format(
-                    "JavaR agent ready (dynamic=%s, port=%d, redefine=%s, retransform=%s, offheap=%s, abi=%d)",
+                    "JavaR agent ready (dynamic=%s, port=%d, redefine=%s, retransform=%s, offheap=%s, abi=%d, managed=on)",
                     dynamic,
                     options.port,
                     inst.isRedefineClassesSupported(),

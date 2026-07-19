@@ -1,0 +1,181 @@
+# JavaR cross-platform CI — build native core, agent JAR, and release archives
+# Author: Roberto de Souza (rabbittrix@hotmail.com)
+
+name: Build
+
+on:
+  push:
+    branches: [main, master]
+    tags: ["v*"]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  native:
+    name: native (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            libname: libjavar_core.so
+            binname: javar
+            archive: linux-x86_64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            libname: javar_core.dll
+            binname: javar.exe
+            archive: windows-x86_64
+          - os: macos-13
+            target: x86_64-apple-darwin
+            libname: libjavar_core.dylib
+            binname: javar
+            archive: macos-x86_64
+          - os: macos-14
+            target: aarch64-apple-darwin
+            libname: libjavar_core.dylib
+            binname: javar
+            archive: macos-aarch64
+
+    defaults:
+      run:
+        working-directory: javar-project
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: javar-project -> target
+          key: ${{ matrix.target }}
+
+      - name: Build javar-core + javar-cli
+        run: cargo build --release -p javar-core -p javar-cli --target ${{ matrix.target }}
+
+      - name: Stage artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT="dist/${{ matrix.archive }}"
+          mkdir -p "$OUT/lib" "$OUT/bin"
+          REL="target/${{ matrix.target }}/release"
+          cp "$REL/${{ matrix.libname }}" "$OUT/lib/"
+          cp "$REL/${{ matrix.binname }}" "$OUT/bin/"
+          ls -la "$OUT/lib" "$OUT/bin"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-${{ matrix.archive }}
+          path: javar-project/dist/${{ matrix.archive }}/
+          if-no-files-found: error
+
+  agent:
+    name: javar-agent (Maven)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: javar-project/javar-agent
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "22"
+          cache: maven
+
+      - name: Package shaded agent
+        run: mvn -B -DskipTests package
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: javar-agent-jar
+          path: javar-project/javar-agent/target/javar-agent-0.1.0.jar
+          if-no-files-found: error
+
+  package:
+    name: zip (${{ matrix.archive }})
+    needs: [native, agent]
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        archive:
+          - linux-x86_64
+          - windows-x86_64
+          - macos-x86_64
+          - macos-aarch64
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: native-${{ matrix.archive }}
+          path: native
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: javar-agent-jar
+          path: agent
+
+      - name: Compose release zip
+        shell: bash
+        run: |
+          set -euo pipefail
+          REL="javar-${{ matrix.archive }}"
+          mkdir -p "$REL/bin" "$REL/lib" "$REL/agent"
+          cp -a native/bin/. "$REL/bin/"
+          cp -a native/lib/. "$REL/lib/"
+          cp agent/*.jar "$REL/agent/javar-agent.jar"
+          cat > "$REL/README.txt" <<'EOF'
+          JavaR release bundle
+          Author: Roberto de Souza <rabbittrix@hotmail.com>
+
+          bin/     CLI (javar)
+          lib/     native javar_core shared library
+          agent/   javar-agent.jar (-javaagent)
+
+          export JAVAR_NATIVE_PATH=$PWD/lib/<native-lib>
+          java -javaagent:$PWD/agent/javar-agent.jar=port=19222 ...
+          ./bin/javar status
+          EOF
+          sed -i 's/^          //' "$REL/README.txt"
+          zip -r "$REL.zip" "$REL"
+          ls -lah "$REL.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: javar-${{ matrix.archive }}
+          path: javar-${{ matrix.archive }}.zip
+
+  release:
+    name: GitHub Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [package]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: javar-*
+          merge-multiple: true
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*.zip
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
