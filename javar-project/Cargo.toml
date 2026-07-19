@@ -33,3 +33,6 @@ ratatui = "0.29"
 crossterm = "0.28"
 sysinfo = "0.32"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+colored = "2"
+indicatif = "0.17"
+dirs = "5"

@@ -2,7 +2,7 @@
   "name": "javar",
   "displayName": "JavaR Cockpit",
   "description": "Zero-Restart Java — hot-reload, off-heap telemetry, and javar CLI integration",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "publisher": "JRSF",
   "author": {
     "name": "Roberto de Souza",
@@ -11,7 +11,8 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/rabbittrix/JavaR"
+    "url": "https://github.com/rabbittrix/JavaR",
+    "directory": "vscode-javar"
   },
   "engines": {
     "vscode": "^1.85.0"

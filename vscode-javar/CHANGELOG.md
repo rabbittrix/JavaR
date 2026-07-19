@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.5
+
+- Fix Marketplace logo: use absolute GitHub raw URL (`vscode-javar/media/logo.png`) so Details page renders the image
+
 ## 0.1.4
 
 - Full CLI command reference in Marketplace README (`init`, `run` options, `status`, `dashboard` / `tui`)

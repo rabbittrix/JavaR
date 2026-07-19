@@ -1,7 +1,7 @@
 # JavaR Cockpit
 
 <p align="center">
-  <img src="media/logo.png" alt="JavaR" width="160" />
+  <img src="https://raw.githubusercontent.com/rabbittrix/JavaR/main/vscode-javar/media/logo.png" alt="JavaR" width="160" />
 </p>
 
 **Zero-Restart Java** — hot-reload, off-heap telemetry, and `javar` CLI integration for Visual Studio Code / Cursor.
@@ -31,17 +31,12 @@ JavaR itself is a **Rust sidecar + Java agent**. This extension is the VS Code c
 2. A Java app started with the JavaR agent — typically via `javar run` (smart launch)
 3. A Java project (optionally with `javar.toml`)
 
-### Install the CLI (from source)
+### Install the CLI
 
-```bash
-git clone https://github.com/rabbittrix/JavaR.git
-cd JavaR/javar-project
-cargo build --release -p javar-cli -p javar-core
-cd javar-agent && mvn -DskipTests package && cd ..
-cargo install --path javar-cli
-```
+**Windows:** `iwr https://javar.dev/install.ps1 | iex`  
+**Linux / macOS:** `curl -fsSL https://javar.dev/install.sh | sh`
 
-Release zips from GitHub Actions also include `bin/javar`, `lib/*javar_core*`, and `agent/javar-agent.jar`.
+Then `javar setup` (run automatically by the installer) extracts the embedded agent + native lib to `~/.javar/bin`.
 
 ---
 

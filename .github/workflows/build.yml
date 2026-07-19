@@ -64,19 +64,37 @@ jobs:
           workspaces: javar-project -> target
           key: ${{ matrix.target }}
 
-      - name: Build javar-core + javar-cli
-        run: cargo build --release -p javar-core -p javar-cli --target ${{ matrix.target }}
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "22"
+          cache: maven
+
+      # Build agent + native first so javar-cli can embed them (single-binary experience).
+      - name: Package javar-agent (for embed)
+        working-directory: javar-project/javar-agent
+        run: mvn -B -DskipTests package
+
+      - name: Build javar-core (native lib)
+        run: cargo build --release -p javar-core --target ${{ matrix.target }}
+
+      - name: Build javar-cli (embeds agent + native)
+        env:
+          JAVAR_EMBED_AGENT: ${{ github.workspace }}/javar-project/javar-agent/target/javar-agent-0.1.0.jar
+          JAVAR_EMBED_NATIVE: ${{ github.workspace }}/javar-project/target/${{ matrix.target }}/release/${{ matrix.libname }}
+        run: cargo build --release -p javar-cli --target ${{ matrix.target }}
 
       - name: Stage artifacts
         shell: bash
         run: |
           set -euo pipefail
           OUT="dist/${{ matrix.archive }}"
-          mkdir -p "$OUT/lib" "$OUT/bin"
+          mkdir -p "$OUT/lib" "$OUT/bin" "$OUT/agent"
           REL="target/${{ matrix.target }}/release"
           cp "$REL/${{ matrix.libname }}" "$OUT/lib/"
           cp "$REL/${{ matrix.binname }}" "$OUT/bin/"
-          ls -la "$OUT/lib" "$OUT/bin"
+          cp javar-agent/target/javar-agent-0.1.0.jar "$OUT/agent/javar-agent.jar"
+          ls -la "$OUT/lib" "$OUT/bin" "$OUT/agent"
 
       - uses: actions/upload-artifact@v4
         with:

@@ -8,7 +8,13 @@ javar-agent/target/
 **/.project
 **/.settings/
 
-# Node / VS Code extension
+# Embed staging (optional local copies for build.rs)
+javar-cli/embedded/
+
+# Release / dist staging
+/dist/
+
+# Legacy / local VS Code extension under this tree
 javar-vscode/node_modules/
 javar-vscode/out/
 *.vsix

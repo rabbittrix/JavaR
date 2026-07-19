@@ -305,50 +305,6 @@ fn read_main_class_from_pom(root: &Path) -> Option<String> {
     Some(name.to_string())
 }
 
-/// Locate `javar_core` shared library for `-Djavar.native.path` / `JAVAR_NATIVE_PATH`.
-pub fn resolve_native_library(project: &Path) -> Option<PathBuf> {
-    if let Ok(env) = std::env::var("JAVAR_NATIVE_PATH") {
-        let p = PathBuf::from(env);
-        if p.is_file() {
-            return Some(p.canonicalize().unwrap_or(p));
-        }
-    }
-
-    let root = crate::workspace_root(project);
-    let names = native_lib_names();
-    let dirs = [
-        root.join("target/release"),
-        root.join("target/debug"),
-        root.join("lib"),
-        project.join("lib"),
-        std::env::current_exe()
-            .ok()
-            .and_then(|p| p.parent().map(|d| d.to_path_buf()))
-            .unwrap_or_else(|| PathBuf::from(".")),
-    ];
-
-    for dir in dirs {
-        for name in &names {
-            let p = dir.join(name);
-            if p.is_file() {
-                info!(path = %p.display(), "resolved native library");
-                return Some(p.canonicalize().unwrap_or(p));
-            }
-        }
-    }
-    None
-}
-
-fn native_lib_names() -> Vec<&'static str> {
-    if cfg!(target_os = "windows") {
-        vec!["javar_core.dll"]
-    } else if cfg!(target_os = "macos") {
-        vec!["libjavar_core.dylib", "javar_core.dylib"]
-    } else {
-        vec!["libjavar_core.so", "javar_core.so"]
-    }
-}
-
 /// True if `args` already set a classpath (`-cp` / `-classpath` / `--class-path`).
 pub fn args_have_classpath(args: &[String]) -> bool {
     let mut i = 0;

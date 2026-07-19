@@ -1,0 +1,46 @@
+# --- Rust ---
+**/target/
+**/*.rs.bk
+
+# --- Java / Maven ---
+**/javar-agent/target/
+**/.classpath
+**/.project
+**/.settings/
+
+# --- Node / VS Code extension ---
+vscode-javar/node_modules/
+vscode-javar/out/
+vscode-javar/*.vsix
+javar-project/javar-vscode/node_modules/
+javar-project/javar-vscode/out/
+*.vsix
+
+# --- JavaR local install / release staging ---
+.javar/
+**/javar-cli/embedded/
+**/dist/
+/javar-linux-*/
+/javar-windows-*/
+/javar-macos-*/
+/javar-*.zip
+
+# --- IDE / OS ---
+.idea/
+*.iml
+.vscode/
+.metals/
+.bloop/
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# --- Env / logs / local overrides ---
+.env
+.env.*
+!.env.example
+*.log
+javar.toml.local
+*.tmp
+*.swp
+*~
