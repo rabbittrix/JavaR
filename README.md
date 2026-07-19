@@ -72,14 +72,15 @@ javar run
 
 That’s it. JavaR will:
 
-1. Prefer a local/dev agent & native lib if present  
-2. Otherwise extract the **embedded** JAR + native lib to `~/.javar/bin/`  
-3. Detect `pom.xml` / `build.gradle` and offer to **build** if classes are missing  
-4. Find a `public static void main`  
-5. Start the sidecar + JVM with `-javaagent` and native path already set  
+1. Extract the **embedded** agent JAR + native lib to `~/.javar/bin/` (if missing)  
+2. Detect `pom.xml` / `build.gradle` and offer to **build** if classes are missing (`javar build`)  
+3. Find a `public static void main`  
+4. Start the sidecar + JVM with absolute `-javaagent` and native path already set  
 
 ```bash
-javar setup                 # re-install assets + PATH
+javar setup                 # extract embedded agent/native + PATH
+javar build                 # Maven/Gradle package (PowerShell-safe, no &&)
+javar run                   # smart launch with embedded -javaagent
 javar run --watch-only      # sidecar only (IDE cockpit)
 javar run -- com.example.App
 javar dashboard             # Control Center TUI
@@ -109,11 +110,15 @@ public class SensorReading {
 ## Dev build (contributors)
 
 ```bash
-cd javar-project/javar-agent && mvn -DskipTests package && cd ..
+cd javar-project
 cargo build --release -p javar-core
-cargo build --release -p javar-cli   # embeds agent + native
+# build.rs auto-runs: mvn -f javar-agent/pom.xml clean package -DskipTests
+# (no shell && — works in PowerShell)
+cargo build --release -p javar-cli
 ./target/release/javar setup
 ```
+
+Requires Maven on `PATH`. Emergency compile without agent: `JAVAR_SKIP_AGENT_EMBED=1`.
 
 ---
 

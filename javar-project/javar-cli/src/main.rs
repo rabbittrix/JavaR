@@ -42,6 +42,11 @@ enum Commands {
     },
     /// Install runtime assets to ~/.javar and add the CLI to PATH.
     Setup,
+    /// Build the current Java project (Maven `clean package` or Gradle `build`).
+    Build {
+        #[arg(value_name = "PATH", default_value = ".")]
+        path: PathBuf,
+    },
     /// Start the sidecar and smart-launch `java` with the agent + native lib.
     ///
     /// Detects Maven/Gradle, builds if needed, finds a main class, and injects
@@ -103,6 +108,7 @@ fn main() -> Result<()> {
     match cli.command {
         Commands::Init { path } => cmd_init(&path),
         Commands::Setup => setup::cmd_setup(),
+        Commands::Build { path } => smart_build::cmd_build(&path),
         Commands::Run {
             path,
             agent,

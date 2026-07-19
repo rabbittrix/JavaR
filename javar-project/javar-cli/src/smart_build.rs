@@ -1,4 +1,5 @@
 //! Smart project build — prompt and run Maven/Gradle when classes are missing.
+//! All process spawns use `std::process::Command` directly (PowerShell-safe, no `&&`).
 
 use crate::smart_run::{BuildSystem, SmartProject};
 use crate::style;
@@ -8,6 +9,41 @@ use std::io::{self, Write};
 use std::path::Path;
 use std::process::{Command, Stdio};
 use std::time::Duration;
+
+/// `javar build` — package/compile the project in `root` (Maven or Gradle).
+pub fn cmd_build(root: &Path) -> Result<()> {
+    let project = SmartProject::discover(root);
+    style::header("javar build");
+    style::info_line(crate::smart_run::describe_project(&project));
+
+    match project.build {
+        BuildSystem::Maven => {
+            if !project.root.join("pom.xml").is_file() {
+                bail!("no pom.xml in {}", project.root.display());
+            }
+            run_maven_package(&project.root)?;
+        }
+        BuildSystem::Gradle => {
+            run_gradle_build(&project.root)?;
+        }
+        BuildSystem::Unknown => {
+            if project.root.join("pom.xml").is_file() {
+                run_maven_package(&project.root)?;
+            } else if project.root.join("build.gradle").is_file()
+                || project.root.join("build.gradle.kts").is_file()
+            {
+                run_gradle_build(&project.root)?;
+            } else {
+                bail!(
+                    "not a Maven/Gradle project (no pom.xml / build.gradle).\n\
+                     Tip: run this inside your Java app directory."
+                );
+            }
+        }
+    }
+    style::ok("Build finished");
+    Ok(())
+}
 
 /// If this is a Maven/Gradle project without usable classes, offer to build.
 pub fn ensure_project_built(project: &SmartProject, assume_yes: bool) -> Result<SmartProject> {
@@ -32,17 +68,17 @@ pub fn ensure_project_built(project: &SmartProject, assume_yes: bool) -> Result<
                 style::warn_line("Skipping build — javar run may fail without classes.");
                 return Ok(SmartProject::discover(&project.root));
             }
-            run_maven_compile(&project.root)?;
+            run_maven_package(&project.root)?;
         }
         BuildSystem::Gradle => {
             if !confirm(
                 "Gradle project not built (no build/classes). Build now? (Y/n) ",
                 assume_yes,
             )? {
-                style::warn_line("Skipping build — javar run may fail without classes.");
+                style::warn_line("Skipping build — run  javar build  later.");
                 return Ok(SmartProject::discover(&project.root));
             }
-            run_gradle_classes(&project.root)?;
+            run_gradle_build(&project.root)?;
         }
         BuildSystem::Unknown => {}
     }
@@ -75,32 +111,36 @@ fn confirm(prompt: &str, assume_yes: bool) -> Result<bool> {
     Ok(t.is_empty() || t == "y" || t == "yes")
 }
 
-fn run_maven_compile(root: &Path) -> Result<()> {
+/// `mvn -DskipTests clean package` as separate argv (no shell).
+fn run_maven_package(root: &Path) -> Result<()> {
     let mvn = resolve_mvn()?;
-    style::banner_line(format!("Building with {} -DskipTests compile", mvn));
-    let pb = spinner("mvn compile");
+    style::banner_line(format!("{mvn} -DskipTests clean package"));
+    let pb = spinner("mvn package");
+    // Single Maven invocation — goals are argv, never `clean && package` in a shell.
     let status = Command::new(&mvn)
-        .args(["-q", "-DskipTests", "compile"])
+        .args(["-B", "-DskipTests", "clean", "package"])
         .current_dir(root)
         .stdin(Stdio::null())
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
         .status()
-        .with_context(|| format!("failed to spawn `{mvn}` — is Maven on PATH?"))?;
+        .with_context(|| {
+            format!("failed to spawn `{mvn}` — install Maven and ensure it is on PATH")
+        })?;
     pb.finish_and_clear();
     if !status.success() {
-        bail!("Maven compile failed ({status})");
+        bail!("Maven package failed ({status}). Fix the project, then run:  javar build");
     }
-    style::ok("Maven compile finished");
+    style::ok("Maven package finished");
     Ok(())
 }
 
-fn run_gradle_classes(root: &Path) -> Result<()> {
+fn run_gradle_build(root: &Path) -> Result<()> {
     let gradle = resolve_gradle(root)?;
-    style::banner_line(format!("Building with {} classes", gradle));
-    let pb = spinner("gradle classes");
+    style::banner_line(format!("{gradle} build -x test"));
+    let pb = spinner("gradle build");
     let status = Command::new(&gradle)
-        .arg("classes")
+        .args(["build", "-x", "test"])
         .current_dir(root)
         .stdin(Stdio::null())
         .stdout(Stdio::inherit())
@@ -109,20 +149,22 @@ fn run_gradle_classes(root: &Path) -> Result<()> {
         .with_context(|| format!("failed to spawn `{gradle}`"))?;
     pb.finish_and_clear();
     if !status.success() {
-        bail!("Gradle classes failed ({status})");
+        bail!("Gradle build failed ({status}). Fix the project, then run:  javar build");
     }
-    style::ok("Gradle classes finished");
+    style::ok("Gradle build finished");
     Ok(())
 }
 
 fn resolve_mvn() -> Result<String> {
+    if cfg!(windows) {
+        if which::which("mvn.cmd").is_ok() {
+            return Ok("mvn.cmd".into());
+        }
+    }
     if which::which("mvn").is_ok() {
         return Ok("mvn".into());
     }
-    if cfg!(windows) && which::which("mvn.cmd").is_ok() {
-        return Ok("mvn.cmd".into());
-    }
-    bail!("Maven not found on PATH (need `mvn`)");
+    bail!("Maven not found on PATH. Install Maven, then run:  javar build");
 }
 
 fn resolve_gradle(root: &Path) -> Result<String> {

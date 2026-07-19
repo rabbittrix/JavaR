@@ -1,8 +1,10 @@
-//! Stage agent JAR + platform native lib into OUT_DIR and generate `embedded_assets.rs`.
+//! Ensure javar-agent.jar exists (auto-run Maven if needed), then stage embeds for include_bytes!.
+//! Author: Roberto de Souza <rabbittrix@hotmail.com>
 
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 fn main() {
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
@@ -10,57 +12,91 @@ fn main() {
     let emb = out_dir.join("embedded");
     fs::create_dir_all(&emb).expect("create OUT_DIR/embedded");
 
+    let agent_dir = manifest_dir.join("../javar-agent");
+    let agent_target = agent_dir.join("target");
+    let stable_jar = agent_target.join("javar-agent.jar");
+
     println!("cargo:rerun-if-env-changed=JAVAR_EMBED_AGENT");
     println!("cargo:rerun-if-env-changed=JAVAR_EMBED_NATIVE");
-    println!("cargo:rerun-if-changed=../javar-agent/target");
+    println!("cargo:rerun-if-env-changed=JAVAR_SKIP_AGENT_EMBED");
+    println!("cargo:rerun-if-changed={}", agent_dir.join("pom.xml").display());
+    println!("cargo:rerun-if-changed={}", agent_target.display());
     println!("cargo:rerun-if-changed=../target/release");
     println!("cargo:rerun-if-changed=../target/debug");
 
-    let agent_dst = emb.join("javar-agent.jar");
-    let mut has_agent = false;
-    match find_agent_jar(&manifest_dir) {
-        Some(src) => {
-            fs::copy(&src, &agent_dst).unwrap_or_else(|e| {
-                panic!("copy agent {} -> {}: {e}", src.display(), agent_dst.display())
-            });
-            println!("cargo:warning=embedding agent from {}", src.display());
-            has_agent = true;
-        }
-        None => {
-            fs::write(&agent_dst, []).expect("write empty agent stub");
-            println!(
-                "cargo:warning=javar-agent.jar not found at build time — \
-                 embed stub is empty. Build agent first: cd javar-agent && mvn -DskipTests package"
-            );
+    // --- Agent JAR: ensure stable path for include_bytes! ---
+    let skip = env::var("JAVAR_SKIP_AGENT_EMBED").ok().as_deref() == Some("1");
+    if let Ok(p) = env::var("JAVAR_EMBED_AGENT") {
+        let p = PathBuf::from(p);
+        if p.is_file() {
+            fs::create_dir_all(&agent_target).ok();
+            fs::copy(&p, &stable_jar).expect("copy JAVAR_EMBED_AGENT → javar-agent.jar");
         }
     }
 
+    if !stable_jar.is_file() || file_is_empty(&stable_jar) {
+        // Remove empty stub so we don't mistake it for a real artifact.
+        if stable_jar.is_file() && file_is_empty(&stable_jar) {
+            let _ = fs::remove_file(&stable_jar);
+        }
+        if let Some(found) = pick_agent_jar(&agent_target) {
+            ensure_stable_copy(&found, &stable_jar);
+            println!("cargo:warning=using agent jar {}", found.display());
+        } else if !skip {
+            println!("cargo:warning=javar-agent.jar missing — running Maven package…");
+            run_maven_package(&agent_dir);
+            if let Some(found) = pick_agent_jar(&agent_target) {
+                ensure_stable_copy(&found, &stable_jar);
+            }
+        }
+    }
+
+    // Stable jar must exist for `include_bytes!("../../javar-agent/target/javar-agent.jar")` in embed.rs.
+    let has_agent = if stable_jar.is_file() && !file_is_empty(&stable_jar) {
+        println!(
+            "cargo:warning=embedding agent ({} bytes) from {}",
+            fs::metadata(&stable_jar).map(|m| m.len()).unwrap_or(0),
+            stable_jar.display()
+        );
+        true
+    } else if skip {
+        fs::create_dir_all(&agent_target).ok();
+        fs::write(&stable_jar, []).expect("empty stable agent stub");
+        println!("cargo:warning=JAVAR_SKIP_AGENT_EMBED=1 — empty javar-agent.jar stub for compile");
+        false
+    } else {
+        panic!(
+            "javar-agent.jar not found after Maven build.\n\
+             Expected: {}\n\
+             Install Maven, then rebuild. Or set JAVAR_EMBED_AGENT to a jar path.\n\
+             PowerShell-safe (no &&):  mvn -f javar-agent/pom.xml clean package -DskipTests",
+            stable_jar.display()
+        )
+    };
+
+    // --- Native lib (optional if not built yet) ---
     let native_name = native_lib_filename();
     let native_dst = emb.join(native_name);
-    let mut has_native = false;
-    match find_native_lib(&manifest_dir, native_name) {
+    let has_native = match find_native_lib(&manifest_dir, native_name) {
         Some(src) => {
-            fs::copy(&src, &native_dst).unwrap_or_else(|e| {
-                panic!("copy native {} -> {}: {e}", src.display(), native_dst.display())
-            });
+            fs::copy(&src, &native_dst).expect("copy native");
             println!("cargo:warning=embedding native lib from {}", src.display());
-            has_native = true;
+            true
         }
         None => {
-            fs::write(&native_dst, []).expect("write empty native stub");
+            fs::write(&native_dst, []).expect("empty native stub");
             println!(
-                "cargo:warning={} not found at build time — build javar-core --release first",
+                "cargo:warning={} not found — build javar-core first for off-heap support",
                 native_name
             );
+            false
         }
-    }
+    };
 
-    // Generate include paths with forward slashes (Windows-safe for include_bytes!).
-    let agent_lit = path_literal(&agent_dst);
     let native_lit = path_literal(&native_dst);
     let gen = format!(
         r#"// @generated by build.rs — do not edit
-pub const EMBEDDED_AGENT: &[u8] = include_bytes!(r"{agent_lit}");
+// Agent JAR is included from ../../javar-agent/target/javar-agent.jar in embed.rs
 pub const EMBEDDED_NATIVE: &[u8] = include_bytes!(r"{native_lit}");
 pub const NATIVE_NAME: &str = "{native_name}";
 pub const HAS_EMBEDDED_AGENT: bool = {has_agent};
@@ -68,6 +104,10 @@ pub const HAS_EMBEDDED_NATIVE: bool = {has_native};
 "#
     );
     fs::write(out_dir.join("embedded_assets.rs"), gen).expect("write embedded_assets.rs");
+}
+
+fn file_is_empty(p: &Path) -> bool {
+    fs::metadata(p).map(|m| m.len() == 0).unwrap_or(true)
 }
 
 fn path_literal(p: &Path) -> String {
@@ -84,26 +124,89 @@ fn native_lib_filename() -> &'static str {
     }
 }
 
-fn find_agent_jar(manifest_dir: &Path) -> Option<PathBuf> {
-    if let Ok(p) = env::var("JAVAR_EMBED_AGENT") {
-        let p = PathBuf::from(p);
-        if p.is_file() {
-            return Some(p);
+/// Run `mvn -f <pom> clean package -DskipTests` via direct Command (no shell `&&`).
+fn run_maven_package(agent_dir: &Path) {
+    let pom = agent_dir.join("pom.xml");
+    if !pom.is_file() {
+        panic!("javar-agent pom.xml missing at {}", pom.display());
+    }
+    let pom_str = pom.to_string_lossy().to_string();
+
+    let mut mvn_candidates: Vec<PathBuf> = Vec::new();
+    if cfg!(windows) {
+        mvn_candidates.push(PathBuf::from("mvn.cmd"));
+    }
+    mvn_candidates.push(PathBuf::from("mvn"));
+    // Common Windows install locations (no shell PATH quirks).
+    if cfg!(windows) {
+        if let Ok(home) = env::var("USERPROFILE") {
+            for rel in [
+                "scoop\\apps\\maven\\current\\bin\\mvn.cmd",
+                "apache-maven\\bin\\mvn.cmd",
+            ] {
+                let p = PathBuf::from(&home).join(rel);
+                if p.is_file() {
+                    mvn_candidates.push(p);
+                }
+            }
+        }
+        for root in [
+            r"C:\Program Files\Apache\maven\bin\mvn.cmd",
+            r"C:\Program Files\Maven\bin\mvn.cmd",
+            r"C:\apache-maven\bin\mvn.cmd",
+        ] {
+            let p = PathBuf::from(root);
+            if p.is_file() {
+                mvn_candidates.push(p);
+            }
         }
     }
 
-    let roots = [
-        manifest_dir.join("../javar-agent/target"),
-        manifest_dir.join("../../javar-agent/target"),
-        manifest_dir.join("embedded"),
-    ];
-
-    for dir in roots {
-        if let Some(jar) = pick_agent_jar(&dir) {
-            return Some(jar);
+    let mut last_err = String::new();
+    for mvn in &mvn_candidates {
+        println!(
+            "cargo:warning=exec: {} -f … clean package -DskipTests",
+            mvn.display()
+        );
+        let status = Command::new(mvn)
+            .args(["-f", &pom_str, "-B", "-DskipTests", "clean", "package"])
+            .status();
+        match status {
+            Ok(st) if st.success() => return,
+            Ok(st) => last_err = format!("{} exited with {st}", mvn.display()),
+            Err(e) => last_err = format!("failed to spawn {}: {e}", mvn.display()),
         }
     }
-    None
+
+    panic!(
+        "Maven package failed for javar-agent ({last_err}).\n\
+         Install Maven and ensure `mvn` is on PATH, then rebuild javar-cli.\n\
+         Do not use shell '&&' chains — Maven is invoked from build.rs directly."
+    );
+}
+
+fn ensure_stable_copy(src: &Path, dest: &Path) {
+    if src == dest || same_file(src, dest) {
+        return;
+    }
+    if let Err(e) = fs::copy(src, dest) {
+        // Windows: destination may be locked — write via temp + rename.
+        let tmp = dest.with_extension("jar.tmp");
+        fs::copy(src, &tmp).unwrap_or_else(|e2| {
+            panic!("copy {} → {}: {e} / tmp: {e2}", src.display(), dest.display())
+        });
+        let _ = fs::remove_file(dest);
+        fs::rename(&tmp, dest).unwrap_or_else(|e2| {
+            panic!("rename {} → {}: {e2}", tmp.display(), dest.display())
+        });
+    }
+}
+
+fn same_file(a: &Path, b: &Path) -> bool {
+    match (fs::canonicalize(a), fs::canonicalize(b)) {
+        (Ok(x), Ok(y)) => x == y,
+        _ => false,
+    }
 }
 
 fn pick_agent_jar(dir: &Path) -> Option<PathBuf> {
@@ -112,12 +215,16 @@ fn pick_agent_jar(dir: &Path) -> Option<PathBuf> {
         .filter_map(|e| e.ok())
         .map(|e| e.path())
         .filter(|p| {
+            if file_is_empty(p) {
+                return false;
+            }
             p.extension().and_then(|e| e.to_str()) == Some("jar")
                 && p.file_name()
                     .and_then(|n| n.to_str())
                     .map(|n| {
                         let l = n.to_ascii_lowercase();
-                        l.contains("javar-agent")
+                        // Prefer real Maven artifacts; ignore the stable alias name itself.
+                        (l.starts_with("javar-agent-") || l == "javar-agent.jar")
                             && !l.contains("sources")
                             && !l.contains("javadoc")
                             && !l.contains("original")
@@ -126,6 +233,15 @@ fn pick_agent_jar(dir: &Path) -> Option<PathBuf> {
         })
         .collect();
     jars.sort();
+    // Prefer versioned shaded artifact over the stable alias.
+    if let Some(preferred) = jars.iter().find(|p| {
+        p.file_name()
+            .and_then(|n| n.to_str())
+            .map(|n| n.starts_with("javar-agent-") && n.ends_with(".jar"))
+            .unwrap_or(false)
+    }) {
+        return Some(preferred.clone());
+    }
     jars.pop()
 }
 

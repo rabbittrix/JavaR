@@ -2,7 +2,7 @@
 /target/
 **/*.rs.bk
 
-# Java / Maven
+# Java / Maven (stable alias javar-agent.jar is produced by javar-cli/build.rs)
 javar-agent/target/
 **/.classpath
 **/.project

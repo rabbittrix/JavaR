@@ -381,7 +381,7 @@ pub fn build_java_launch_args(
             .clone()
             .context(
                 "no compiled classes found (expected target/classes or build/classes/java/main). \
-                 Build the project first (mvn compile / gradle classes).",
+                 Run:  javar build",
             )?;
         out.push("-cp".into());
         out.push(classes.display().to_string());

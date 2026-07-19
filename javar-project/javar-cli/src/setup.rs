@@ -14,17 +14,28 @@ pub fn cmd_setup() -> Result<()> {
     style::header("JavaR setup");
     style::banner_line(format!("OS: {} / {}", env::consts::OS, env::consts::ARCH));
 
-    // Extract whatever embeds/local assets are available (agent and native independently).
-    let cwd = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-    match embed::resolve_or_extract_agent(&cwd, None) {
+    // Force-extract embedded agent + native into ~/.javar/bin.
+    match embed::force_extract_agent() {
         Ok(agent) => style::ok(format!("Agent → {}", agent.display())),
-        Err(e) => style::warn_line(format!("Agent: {e:#}")),
+        Err(e) => {
+            let cwd = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+            match embed::resolve_or_extract_agent(&cwd, None) {
+                Ok(agent) => style::ok(format!("Agent → {}", agent.display())),
+                Err(_) => style::warn_line(format!("Agent: {e:#}")),
+            }
+        }
     }
-    match embed::resolve_or_extract_native(&cwd) {
+    match embed::force_extract_native() {
         Some(n) => style::ok(format!("Native → {}", n.display())),
-        None => style::warn_line(
-            "Native lib not embedded/found — off-heap may be unavailable until rebuilt",
-        ),
+        None => {
+            let cwd = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+            match embed::resolve_or_extract_native(&cwd) {
+                Some(n) => style::ok(format!("Native → {}", n.display())),
+                None => style::warn_line(
+                    "Native lib not embedded/found — rebuild javar-core then javar-cli",
+                ),
+            }
+        }
     }
 
     let exe = env::current_exe().context("current_exe")?;

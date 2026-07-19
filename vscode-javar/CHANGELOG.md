@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.6
+
+- Document `javar setup` / `javar build` and embedded agent force-extract in Marketplace README
+- Align install one-liners with root `scripts/install.ps1` / `install.sh`
+
 ## 0.1.5
 
 - Fix Marketplace logo: use absolute GitHub raw URL (`vscode-javar/media/logo.png`) so Details page renders the image

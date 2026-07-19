@@ -33,10 +33,22 @@ JavaR itself is a **Rust sidecar + Java agent**. This extension is the VS Code c
 
 ### Install the CLI
 
-**Windows:** `iwr https://javar.dev/install.ps1 | iex`  
-**Linux / macOS:** `curl -fsSL https://javar.dev/install.sh | sh`
+**Windows (PowerShell):**
 
-Then `javar setup` (run automatically by the installer) extracts the embedded agent + native lib to `~/.javar/bin`.
+```powershell
+iwr https://javar.dev/install.ps1 | iex
+# or: irm https://raw.githubusercontent.com/rabbittrix/JavaR/main/scripts/install.ps1 | iex
+```
+
+**Linux / macOS:**
+
+```bash
+curl -fsSL https://javar.dev/install.sh | sh
+# or: curl -fsSL https://raw.githubusercontent.com/rabbittrix/JavaR/main/scripts/install.sh | sh
+```
+
+The installer places the binary in `~/.javar/bin` and runs `javar setup`, which  
+**force-extracts** the embedded `javar-agent.jar` + native lib (no manual `-javaagent` path).
 
 ---
 
@@ -44,14 +56,17 @@ Then `javar setup` (run automatically by the installer) extracts the embedded ag
 
 ### 1. Run your app with the JavaR CLI
 
-`javar run` is smart: it detects Maven/Gradle, finds `target/classes` or `build/classes`,  
-locates a `public static void main` if you omit one, and starts the JVM with  
-`-javaagent:<absolute path>` plus the native library path already set.
+`javar run` is smart: it extracts the embedded agent if needed, detects Maven/Gradle,  
+finds `target/classes` or `build/classes`, locates a `public static void main` if you omit one,  
+and starts the JVM with `-javaagent:<absolute path>` plus the native library path.
 
 ```bash
 # Full smart launch (agent + native + -cp + discovered Main)
 javar run
 javar run ./my-app
+
+# Build the Java project first (PowerShell-safe — no &&)
+javar build
 
 # Explicit main / classpath after --
 javar run -- com.example.HelloJavaR
@@ -71,6 +86,8 @@ javar run --watch-only
 | CLI command | Purpose |
 |-------------|---------|
 | `javar init [PATH]` | Scaffold project + `javar.toml` + sample main |
+| `javar setup` | Extract embedded agent/native to `~/.javar/bin` + PATH |
+| `javar build [PATH]` | Maven/Gradle package (PowerShell-safe, no `&&`) |
 | `javar run [PATH]` | Smart-detect build, classes, main; start core + JVM |
 | `javar run [PATH] -- [java args…]` | Same, with explicit `java` args after `--` |
 | `javar run --watch-only` | Start javar-core only (IDE / cockpit) |
