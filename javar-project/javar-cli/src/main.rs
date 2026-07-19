@@ -1,6 +1,7 @@
 //! JavaR CLI — orchestrate build, agent injection, Control Center TUI.
 
 mod dashboard;
+mod smart_run;
 
 use anyhow::{bail, Context, Result};
 use bytes::Bytes;
@@ -34,16 +35,34 @@ enum Commands {
         #[arg(default_value = ".")]
         path: PathBuf,
     },
-    /// Build agent/core (if needed), start watching, and print JVM inject flags.
+    /// Start the sidecar and smart-launch `java` with the agent + native lib.
+    ///
+    /// Detects Maven/Gradle, `target/classes` or `build/classes`, finds a main class,
+    /// and injects `-javaagent` / `-Djavar.native.path`. Extra java args go after `--`:
+    /// `javar run` · `javar run . -- -cp app.jar Main`
     Run {
-        #[arg(default_value = ".")]
-        path: PathBuf,
+        /// Project directory (optional; defaults to `.`).
+        #[arg(value_name = "PATH")]
+        path: Option<PathBuf>,
+        /// Explicit path to javar-agent.jar (auto-discovers if omitted).
+        #[arg(long)]
+        agent: Option<PathBuf>,
         /// Agent listen port
         #[arg(long, default_value_t = 19222)]
         port: u16,
-        /// Skip spawning javar-core (print flags only)
+        /// Only print resolved flags / launch line; do not start processes
         #[arg(long)]
         flags_only: bool,
+        /// Do not spawn javar-core (useful when only launching java)
+        #[arg(long)]
+        no_core: bool,
+        /// Only start the watcher/sidecar — do not auto-launch a JVM
+        #[arg(long)]
+        watch_only: bool,
+        /// Arguments for `java` — everything after `--`
+        /// (e.g. `javar run . -- -cp app.jar Main`).
+        #[arg(last = true, allow_hyphen_values = true)]
+        args: Vec<String>,
     },
     /// Probe agent socket and print telemetry / status.
     Status {
@@ -77,13 +96,26 @@ fn main() -> Result<()> {
         Commands::Init { path } => cmd_init(&path),
         Commands::Run {
             path,
+            agent,
             port,
             flags_only,
-        } => cmd_run(&path, port, flags_only),
-        Commands::Status { addr } => cmd_status(&addr),
-        Commands::Dashboard { addr } | Commands::Tui { addr } => {
-            dashboard::run_dashboard(addr)
+            no_core,
+            watch_only,
+            args,
+        } => {
+            let path = path.unwrap_or_else(|| PathBuf::from("."));
+            cmd_run(
+                &path,
+                agent.as_deref(),
+                port,
+                flags_only,
+                no_core,
+                watch_only,
+                &args,
+            )
         }
+        Commands::Status { addr } => cmd_status(&addr),
+        Commands::Dashboard { addr } | Commands::Tui { addr } => dashboard::run_dashboard(addr),
     }
 }
 
@@ -140,65 +172,166 @@ public class HelloJavaR {
     }
 
     println!("JavaR project initialized at {}", path.display());
-    println!("Next: javar run");
+    println!("Next: javar run   (or: javar run . -- com.example.HelloJavaR)");
     Ok(())
 }
 
-fn cmd_run(path: &Path, port: u16, flags_only: bool) -> Result<()> {
-    let agent_jar = resolve_agent_jar(path)?;
-    let java_opts = format!("-javaagent:{}=port={}", agent_jar.display(), port);
+fn cmd_run(
+    path: &Path,
+    agent: Option<&Path>,
+    port: u16,
+    flags_only: bool,
+    no_core: bool,
+    watch_only: bool,
+    args: &[String],
+) -> Result<()> {
+    let agent_jar = resolve_agent_jar(path, agent)?;
+    let agent_abs = absolute_path(&agent_jar)?;
+    let agent_flag = format!("-javaagent:{}=port={}", agent_abs.display(), port);
 
-    println!("# Inject the agent into your JVM:");
-    println!("export JAVA_TOOL_OPTIONS='{}'", java_opts);
-    println!("# or:");
-    println!("java {} -cp <classpath> com.example.Main", java_opts);
+    let project = smart_run::SmartProject::discover(path);
+    let native = smart_run::resolve_native_library(path);
+
+    println!("# JavaR smart run — {}", smart_run::describe_project(&project));
+    println!("# JavaR agent: {}", agent_abs.display());
+    if let Some(ref n) = native {
+        println!("# Native lib:  {}", n.display());
+    } else {
+        println!("# Native lib:  (not found — set JAVAR_NATIVE_PATH)");
+    }
+    println!("# Inject flag:");
+    println!("{}", agent_flag);
     println!();
     println!("JAVAR_AGENT_ADDR=127.0.0.1:{}", port);
 
+    let want_java = !watch_only
+        && ( !args.is_empty()
+            || smart_run::can_smart_launch(&project) );
+
+    let java_argv = if want_java {
+        match smart_run::build_java_launch_args(&project, args, native.as_deref()) {
+            Ok(v) => Some(v),
+            Err(e) if args.is_empty() && !watch_only => {
+                warn!("smart java launch skipped: {e:#}");
+                None
+            }
+            Err(e) => return Err(e),
+        }
+    } else {
+        None
+    };
+
     if flags_only {
+        if let Some(ref argv) = java_argv {
+            print!("# Equivalent java launch:\njava {}", agent_flag);
+            for a in argv {
+                print!(" {}", shell_escape(a));
+            }
+            println!();
+        }
         return Ok(());
     }
 
-    let core_bin = resolve_core_bin(path);
     let addr = format!("127.0.0.1:{port}");
+    let mut core_child = None;
 
-    info!(?core_bin, "starting javar-core sidecar");
-    match core_bin {
-        Some(bin) => {
-            let status = Command::new(bin)
-                .arg(path)
-                .env("JAVAR_AGENT_ADDR", &addr)
-                .stdin(Stdio::inherit())
-                .stdout(Stdio::inherit())
-                .stderr(Stdio::inherit())
-                .status()
-                .context("spawn javar-core")?;
-            if !status.success() {
-                bail!("javar-core exited with {status}");
-            }
+    if !no_core {
+        info!("starting javar-core sidecar");
+        core_child = Some(spawn_core(path, &addr)?);
+    }
+
+    if let Some(java_argv) = java_argv {
+        info!(
+            ?java_argv,
+            agent = %agent_abs.display(),
+            "launching java with JavaR agent"
+        );
+        let mut cmd = Command::new("java");
+        cmd.arg(&agent_flag)
+            .args(&java_argv)
+            .env("JAVAR_AGENT_ADDR", &addr)
+            .current_dir(&project.root)
+            .stdin(Stdio::inherit())
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit());
+
+        if let Some(ref n) = native {
+            cmd.env("JAVAR_NATIVE_PATH", n);
         }
-        None => {
-            let status = Command::new("cargo")
-                .args([
-                    "run",
-                    "-p",
-                    "javar-core",
-                    "--",
-                    path.to_str().unwrap_or("."),
-                ])
-                .current_dir(workspace_root(path))
-                .env("JAVAR_AGENT_ADDR", &addr)
-                .stdin(Stdio::inherit())
-                .stdout(Stdio::inherit())
-                .stderr(Stdio::inherit())
-                .status()
-                .context("cargo run javar-core")?;
-            if !status.success() {
-                bail!("javar-core exited with {status}");
-            }
+
+        let status = cmd.status().context("spawn java")?;
+
+        if let Some(mut child) = core_child {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+
+        if !status.success() {
+            bail!("java exited with {status}");
+        }
+        return Ok(());
+    }
+
+    // Watcher / sidecar only.
+    if let Some(mut child) = core_child {
+        let status = child.wait().context("wait javar-core")?;
+        if !status.success() {
+            bail!("javar-core exited with {status}");
         }
     }
+
     Ok(())
+}
+
+fn spawn_core(path: &Path, addr: &str) -> Result<std::process::Child> {
+    if let Some(bin) = resolve_core_bin(path) {
+        return Command::new(bin)
+            .arg(path)
+            .env("JAVAR_AGENT_ADDR", addr)
+            .stdin(Stdio::null())
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
+            .spawn()
+            .context("spawn javar-core");
+    }
+
+    Command::new("cargo")
+        .args([
+            "run",
+            "-q",
+            "-p",
+            "javar-core",
+            "--",
+            path.to_str().unwrap_or("."),
+        ])
+        .current_dir(workspace_root(path))
+        .env("JAVAR_AGENT_ADDR", addr)
+        .stdin(Stdio::null())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .spawn()
+        .context("cargo run javar-core")
+}
+
+fn shell_escape(s: &str) -> String {
+    if s.chars()
+        .any(|c| c.is_whitespace() || matches!(c, '"' | '\''))
+    {
+        format!("\"{}\"", s.replace('\"', "\\\""))
+    } else {
+        s.to_string()
+    }
+}
+
+/// Resolve `path` to an absolute filesystem path.
+fn absolute_path(path: &Path) -> Result<PathBuf> {
+    if path.is_absolute() {
+        return Ok(path.canonicalize().unwrap_or_else(|_| path.to_path_buf()));
+    }
+    let abs = std::env::current_dir()
+        .context("current_dir")?
+        .join(path);
+    Ok(abs.canonicalize().unwrap_or(abs))
 }
 
 fn cmd_status(addr: &str) -> Result<()> {
@@ -241,17 +374,54 @@ fn cmd_status(addr: &str) -> Result<()> {
     Ok(())
 }
 
-fn resolve_agent_jar(project: &Path) -> Result<PathBuf> {
-    let candidates = [
+/// Resolve the agent JAR.
+/// Prefer `--agent`, then `../javar-agent/target/*.jar`, then workspace/project paths.
+fn resolve_agent_jar(project: &Path, explicit: Option<&Path>) -> Result<PathBuf> {
+    if let Some(p) = explicit {
+        if p.exists() {
+            return Ok(p.canonicalize().unwrap_or_else(|_| p.to_path_buf()));
+        }
+        bail!("agent JAR not found: {}", p.display());
+    }
+
+    if let Ok(env) = std::env::var("JAVAR_AGENT_JAR") {
+        let p = PathBuf::from(&env);
+        if p.exists() {
+            return Ok(p.canonicalize().unwrap_or(p));
+        }
+    }
+
+    let mut candidates: Vec<PathBuf> = Vec::new();
+
+    // Relative to CWD: ../javar-agent/target/
+    let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    candidates.push(cwd.join("../javar-agent/target"));
+    candidates.push(project.join("../javar-agent/target"));
+    candidates.push(workspace_root(project).join("javar-agent/target"));
+    candidates.push(project.join("javar-agent/target"));
+    candidates.push(project.join("lib"));
+    candidates.push(cwd.join("lib"));
+
+    for dir in &candidates {
+        if let Some(jar) = find_agent_jar_in_dir(dir) {
+            info!(path = %jar.display(), "resolved javar-agent jar");
+            return Ok(jar.canonicalize().unwrap_or(jar));
+        }
+    }
+
+    // Named fallbacks
+    let named = [
         workspace_root(project).join("javar-agent/target/javar-agent-0.1.0.jar"),
-        project.join("javar-agent/target/javar-agent-0.1.0.jar"),
+        cwd.join("../javar-agent/target/javar-agent-0.1.0.jar"),
         project.join("lib/javar-agent.jar"),
     ];
-    for c in &candidates {
+    for c in &named {
         if c.exists() {
             return Ok(c.canonicalize().unwrap_or_else(|_| c.clone()));
         }
     }
+
+    // Try Maven build once
     let agent_dir = workspace_root(project).join("javar-agent");
     if agent_dir.join("pom.xml").exists() {
         info!("building javar-agent with Maven");
@@ -262,14 +432,51 @@ fn resolve_agent_jar(project: &Path) -> Result<PathBuf> {
             .status();
         if let Ok(st) = status {
             if st.success() {
-                let jar = agent_dir.join("target/javar-agent-0.1.0.jar");
-                if jar.exists() {
+                if let Some(jar) = find_agent_jar_in_dir(&agent_dir.join("target")) {
                     return Ok(jar);
                 }
             }
         }
     }
-    bail!("javar-agent jar not found. Build with: cd javar-agent && mvn package")
+
+    bail!(
+        "javar-agent jar not found. Looked in ../javar-agent/target/ and workspace. \
+         Build with: cd javar-agent && mvn package  (or pass --agent <path>)"
+    )
+}
+
+fn find_agent_jar_in_dir(dir: &Path) -> Option<PathBuf> {
+    if !dir.is_dir() {
+        return None;
+    }
+    let mut jars: Vec<PathBuf> = fs::read_dir(dir)
+        .ok()?
+        .filter_map(|e| e.ok())
+        .map(|e| e.path())
+        .filter(|p| {
+            p.extension().and_then(|e| e.to_str()) == Some("jar")
+                && p.file_name()
+                    .and_then(|n| n.to_str())
+                    .map(|n| {
+                        let lower = n.to_ascii_lowercase();
+                        lower.contains("javar-agent") && !lower.contains("sources") && !lower.contains("javadoc")
+                    })
+                    .unwrap_or(false)
+        })
+        .collect();
+
+    // Prefer non-original / shaded artifact names; sort for stability.
+    jars.sort();
+    // Prefer exact versioned name if present.
+    if let Some(preferred) = jars.iter().find(|p| {
+        p.file_name()
+            .and_then(|n| n.to_str())
+            .map(|n| n.starts_with("javar-agent-") && n.ends_with(".jar"))
+            .unwrap_or(false)
+    }) {
+        return Some(preferred.clone());
+    }
+    jars.pop()
 }
 
 fn resolve_core_bin(project: &Path) -> Option<PathBuf> {
@@ -284,7 +491,7 @@ fn resolve_core_bin(project: &Path) -> Option<PathBuf> {
     .find(|p| p.exists())
 }
 
-fn workspace_root(hint: &Path) -> PathBuf {
+pub(crate) fn workspace_root(hint: &Path) -> PathBuf {
     let hint = hint.canonicalize().unwrap_or_else(|_| hint.to_path_buf());
     if hint.join("Cargo.toml").exists() && hint.join("javar-core").exists() {
         return hint;

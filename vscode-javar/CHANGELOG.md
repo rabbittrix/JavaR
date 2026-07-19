@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.3
+
+- Cockpit auto-start uses `javar run --watch-only` (sidecar only; app launch is via smart CLI)
+- Document smart `javar run`: Maven/Gradle detect, classes dir, main discovery, native lib path
+
+## 0.1.2
+
+- Document `javar run [PATH] -- [java args…]`: auto-discovers agent JAR, prepends absolute `-javaagent`, args after `--` go to `java`
+- Clarify agent discovery (`--agent`, `JAVAR_AGENT_JAR`, relative target path)
+
 ## 0.1.1
 
 - Add Marketplace README with full usage guide, commands, settings, and troubleshooting

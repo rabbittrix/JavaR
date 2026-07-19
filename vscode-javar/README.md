@@ -45,10 +45,25 @@ Release zips from GitHub Actions also include `bin/javar`, `lib/*javar_core*`, a
 
 ## Quick start
 
-### 1. Run your app with the JavaR agent
+### 1. Run your app with JavaR (CLI)
+
+`javar run` is smart: it detects Maven/Gradle, finds `target/classes` or `build/classes`,  
+locates a `public static void main` if you omit one, and starts the JVM with  
+`-javaagent:<absolute jar>` plus the native library path already set.
 
 ```bash
-java -javaagent:/path/to/javar-agent.jar=port=19222 -cp <classpath> com.example.Main
+# Auto: agent + native lib + -cp <classes> + discovered Main
+javar run
+
+# Explicit main / classpath after --
+javar run . -- com.example.HelloJavaR
+javar run -- -cp app.jar Main
+
+# Explicit agent JAR
+javar run . --agent /path/to/javar-agent.jar -- com.example.Main
+
+# Watcher / sidecar only (what the Cockpit auto-start uses)
+javar run --watch-only
 ```
 
 Optional native off-heap library:
@@ -65,7 +80,7 @@ export JAVAR_NATIVE_PATH=/path/to/libjavar_core.so   # or .dylib
 
 - Install **JavaR Cockpit** (`jrsf.javar`)
 - Open a folder that contains Java sources (and ideally `javar.toml`)
-- With `javar.autoStart` enabled (default), the extension starts `javar run` and connects to the agent
+- With `javar.autoStart` enabled (default), the extension starts `javar run --watch-only` and connects to the agent
 
 ### 3. Use the Cockpit
 

@@ -68,22 +68,33 @@ public class SensorReading {
 ```
 
 ```powershell
-# Terminal A — your app with the agent
-java "-javaagent:javar-agent\target\javar-agent-0.1.0.jar=port=19222" -cp ... com.example.Main
-
-# Terminal B — watcher / sidecar
+# Smart run — detects pom.xml / build.gradle, target/classes or build/classes,
+# finds a public static void main, injects -javaagent + native lib path:
 javar run
 
-# Terminal C — Control Center
+# Override main / classpath after --
+javar run . -- com.example.HelloJavaR
+javar run -- -cp app.jar Main
+
+# Sidecar only (no JVM), or print the resolved java line:
+javar run --watch-only
+javar run --flags-only
+
+# Control Center
 javar dashboard
 ```
 
 | Command | Purpose |
 |---------|---------|
 | `javar init` | Scaffold project + `javar.toml` |
-| `javar run` | Print `-javaagent` flags + start core |
+| `javar run [PATH]` | Smart-detect build, classes, main; start core + JVM |
+| `javar run [PATH] -- [java args…]` | Same, with explicit `java` args after `--` |
+| `javar run --watch-only` | Start javar-core only (IDE / cockpit) |
+| `javar run --agent <jar>` | Override agent JAR path |
 | `javar status` | One-shot telemetry |
 | `javar dashboard` | Live TUI (heap vs off-heap, shadows, GC, logs) |
+
+**Smart run** looks for `pom.xml` / `build.gradle(.kts)`, prefers `target/classes` (Maven) or `build/classes/java/main` (Gradle), resolves `javar-agent.jar` and `javar_core` native lib (`JAVAR_NATIVE_PATH` / `-Djavar.native.path`), and discovers a main class if you omit one.
 
 ---
 

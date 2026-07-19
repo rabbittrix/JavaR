@@ -100,7 +100,7 @@ function startCli(quiet = false): void {
   const folder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? ".";
   const port = cfg.get<number>("agentPort", 19222);
 
-  coreProc = spawn(cli, ["run", folder, "--port", String(port)], {
+  coreProc = spawn(cli, ["run", folder, "--watch-only", "--port", String(port)], {
     cwd: folder,
     shell: true,
     env: { ...process.env, JAVAR_AGENT_ADDR: `127.0.0.1:${port}` },
