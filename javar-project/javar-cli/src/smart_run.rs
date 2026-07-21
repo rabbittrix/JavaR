@@ -320,13 +320,33 @@ pub fn is_spring_boot(root: &Path) -> bool {
         || lower.contains("spring-boot-starter")
 }
 
-/// Display name for dashboards: Maven `artifactId`, else directory name.
+/// Display name for dashboards: project `artifactId` (not the parent POM).
 pub fn project_display_name(root: &Path) -> String {
     if let Ok(pom) = fs::read_to_string(root.join("pom.xml")) {
-        if let Some(name) = xml_tag_text(&pom, "artifactId") {
-            if !name.contains('$') && !name.is_empty() {
-                return name;
+        // Prefer artifactId after </parent> so spring-boot-starter-parent is skipped.
+        if let Some(after_parent) = pom.split("</parent>").nth(1) {
+            if let Some(name) = xml_tag_text(after_parent, "artifactId") {
+                if !name.contains('$') && !name.is_empty() {
+                    return name;
+                }
             }
+        }
+        // Fallback: last artifactId in the file that isn't a known parent id.
+        let mut last = None;
+        let mut rest = pom.as_str();
+        while let Some(name) = xml_tag_text(rest, "artifactId") {
+            if name != "spring-boot-starter-parent" && !name.contains('$') {
+                last = Some(name.clone());
+            }
+            if let Some(idx) = rest.find(&format!("</artifactId>")) {
+                rest = &rest[idx + "</artifactId>".len()..];
+            } else {
+                break;
+            }
+            let _ = name;
+        }
+        if let Some(name) = last {
+            return name;
         }
         if let Some(name) = xml_tag_text(&pom, "name") {
             if !name.is_empty() {

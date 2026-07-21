@@ -8,15 +8,22 @@ import java.lang.management.ManagementFactory;
 import java.lang.management.MemoryMXBean;
 import java.lang.management.MemoryUsage;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
+import java.util.ArrayDeque;
+import java.util.Deque;
 
 /**
- * Reports Java heap usage vs. JavaR-managed off-heap memory (Panama/JNI).
+ * Reports Java heap usage vs. JavaR-managed off-heap memory (Panama/JNI),
+ * plus a ring buffer of hot-reload events for the Control Center.
  */
 public final class TelemetryReporter {
+
+    private static final int HISTORY_CAP = 64;
 
     private final Instrumentation instrumentation;
     private final MemoryMXBean memoryMXBean = ManagementFactory.getMemoryMXBean();
     private final OffHeapBridge offHeap;
+    private final Deque<ReloadEvent> history = new ArrayDeque<ReloadEvent>();
 
     /** Manual override when native bridge is unavailable. */
     private volatile long javarManagedBytesOverride = -1L;
@@ -29,7 +36,6 @@ public final class TelemetryReporter {
         this.offHeap = offHeap;
     }
 
-    /** Backward-compatible ctor used by tests / older call sites. */
     public TelemetryReporter(
             Instrumentation instrumentation,
             java.util.concurrent.atomic.AtomicLong reloadCount) {
@@ -40,12 +46,24 @@ public final class TelemetryReporter {
         this.javarManagedBytesOverride = Math.max(0, bytes);
     }
 
+    public synchronized void recordReload(String className, String changeType, int version) {
+        history.addFirst(new ReloadEvent(
+                Instant.now().toString(),
+                className == null ? "?" : className,
+                changeType == null ? "Body" : changeType,
+                version));
+        while (history.size() > HISTORY_CAP) {
+            history.removeLast();
+        }
+    }
+
     public byte[] snapshotJson(long reloadCount) {
         MemoryUsage heap = memoryMXBean.getHeapMemoryUsage();
         long loaded = instrumentation != null ? instrumentation.getAllLoadedClasses().length : 0;
         long managed = resolveManagedBytes();
         String backend = offHeap != null ? offHeap.backend() : "none";
         String project = resolveProjectName();
+        String histJson = historyJson();
         String json = "{"
                 + "\"java_heap_used\":" + heap.getUsed() + ","
                 + "\"java_heap_max\":" + heap.getMax() + ","
@@ -55,9 +73,30 @@ public final class TelemetryReporter {
                 + "\"reload_count\":" + reloadCount + ","
                 + "\"loaded_classes\":" + loaded + ","
                 + "\"offheap_backend\":\"" + escapeJson(backend) + "\","
-                + "\"project_name\":\"" + escapeJson(project) + "\""
+                + "\"project_name\":\"" + escapeJson(project) + "\","
+                + "\"reload_history\":" + histJson
                 + "}";
         return json.getBytes(StandardCharsets.UTF_8);
+    }
+
+    private synchronized String historyJson() {
+        StringBuilder sb = new StringBuilder();
+        sb.append('[');
+        boolean first = true;
+        for (ReloadEvent e : history) {
+            if (!first) {
+                sb.append(',');
+            }
+            first = false;
+            sb.append('{')
+                    .append("\"ts\":\"").append(escapeJson(e.ts)).append("\",")
+                    .append("\"class_name\":\"").append(escapeJson(e.className)).append("\",")
+                    .append("\"change_type\":\"").append(escapeJson(e.changeType)).append("\",")
+                    .append("\"version\":").append(e.version)
+                    .append('}');
+        }
+        sb.append(']');
+        return sb.toString();
     }
 
     private static String resolveProjectName() {
@@ -68,10 +107,6 @@ public final class TelemetryReporter {
         String env = System.getenv("JAVAR_PROJECT_NAME");
         if (env != null && !env.isEmpty()) {
             return env;
-        }
-        // Fall back to main class simple name when available.
-        for (StackTraceElement el : Thread.currentThread().getStackTrace()) {
-            // ignore
         }
         String cmd = System.getProperty("sun.java.command", "");
         if (!cmd.isEmpty()) {
@@ -106,5 +141,19 @@ public final class TelemetryReporter {
             }
         }
         return fromRuntime;
+    }
+
+    static final class ReloadEvent {
+        final String ts;
+        final String className;
+        final String changeType;
+        final int version;
+
+        ReloadEvent(String ts, String className, String changeType, int version) {
+            this.ts = ts;
+            this.className = className;
+            this.changeType = changeType;
+            this.version = version;
+        }
     }
 }

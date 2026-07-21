@@ -119,3 +119,69 @@ INFO: Unsupported notification method: $/setTrace
 2026.07.19 17:19:09 WARN  no build target for: G:\Project_JavaR\javar-project\javar-agent\src\main\java22\com\javar\agent\memory\PanamaOffHeapBridge.java
 2026.07.19 17:19:10 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java22\com\javar\agent\memory\PanamaOffHeapBridge.java. Using fallback presentation compiler.
 2026.07.19 17:22:09 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java22\com\javar\agent\memory\PanamaOffHeapBridge.java. Using fallback presentation compiler.
+Jul 19, 2026 8:29:31 PM org.eclipse.lsp4j.jsonrpc.services.GenericEndpoint notify
+INFO: Unsupported notification method: $/setTrace
+Jul 19, 2026 8:29:32 PM org.eclipse.lsp4j.jsonrpc.services.GenericEndpoint notify
+INFO: Unsupported notification method: $/setTrace
+Jul 19, 2026 8:29:32 PM org.eclipse.lsp4j.jsonrpc.services.GenericEndpoint notify
+INFO: Unsupported notification method: $/setTrace
+Jul 19, 2026 8:29:33 PM org.eclipse.lsp4j.jsonrpc.services.GenericEndpoint notify
+INFO: Unsupported notification method: $/setTrace
+Jul 19, 2026 8:29:33 PM org.eclipse.lsp4j.jsonrpc.services.GenericEndpoint notify
+INFO: Unsupported notification method: $/setTrace
+Jul 19, 2026 8:29:33 PM org.eclipse.lsp4j.jsonrpc.services.GenericEndpoint notify
+INFO: Unsupported notification method: $/setTrace
+Jul 19, 2026 8:29:34 PM org.eclipse.lsp4j.jsonrpc.services.GenericEndpoint notify
+INFO: Unsupported notification method: $/setTrace
+Jul 19, 2026 8:29:34 PM org.eclipse.lsp4j.jsonrpc.services.GenericEndpoint notify
+INFO: Unsupported notification method: $/setTrace
+Jul 19, 2026 8:29:34 PM org.eclipse.lsp4j.jsonrpc.services.GenericEndpoint notify
+INFO: Unsupported notification method: $/setTrace
+Jul 19, 2026 8:29:35 PM org.eclipse.lsp4j.jsonrpc.services.GenericEndpoint notify
+INFO: Unsupported notification method: $/setTrace
+Jul 19, 2026 8:29:36 PM org.eclipse.lsp4j.jsonrpc.services.GenericEndpoint notify
+INFO: Unsupported notification method: $/setTrace
+Jul 19, 2026 8:29:37 PM org.eclipse.lsp4j.jsonrpc.services.GenericEndpoint notify
+INFO: Unsupported notification method: $/setTrace
+Jul 19, 2026 8:29:44 PM org.eclipse.lsp4j.jsonrpc.services.GenericEndpoint notify
+INFO: Unsupported notification method: $/setTrace
+Jul 19, 2026 8:29:46 PM org.eclipse.lsp4j.jsonrpc.services.GenericEndpoint notify
+INFO: Unsupported notification method: $/setTrace
+Jul 19, 2026 9:09:41 PM org.eclipse.lsp4j.jsonrpc.services.GenericEndpoint notify
+INFO: Unsupported notification method: $/setTrace
+Jul 19, 2026 9:09:43 PM org.eclipse.lsp4j.jsonrpc.services.GenericEndpoint notify
+INFO: Unsupported notification method: $/setTrace
+Jul 19, 2026 9:09:45 PM org.eclipse.lsp4j.jsonrpc.services.GenericEndpoint notify
+INFO: Unsupported notification method: $/setTrace
+Jul 19, 2026 9:09:47 PM org.eclipse.lsp4j.jsonrpc.services.GenericEndpoint notify
+INFO: Unsupported notification method: $/setTrace
+Jul 19, 2026 9:09:56 PM org.eclipse.lsp4j.jsonrpc.services.GenericEndpoint notify
+INFO: Unsupported notification method: $/setTrace
+Jul 19, 2026 9:09:56 PM org.eclipse.lsp4j.jsonrpc.services.GenericEndpoint notify
+INFO: Unsupported notification method: $/setTrace
+Jul 19, 2026 9:09:58 PM org.eclipse.lsp4j.jsonrpc.services.GenericEndpoint notify
+INFO: Unsupported notification method: $/setTrace
+Jul 19, 2026 9:10:00 PM org.eclipse.lsp4j.jsonrpc.services.GenericEndpoint notify
+INFO: Unsupported notification method: $/setTrace
+2026.07.19 21:39:15 WARN  no build target for: G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\managed\JavaRManagedRuntime.java
+2026.07.19 21:39:20 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\managed\JavaRManagedRuntime.java. Using fallback presentation compiler.
+2026.07.19 21:39:25 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\managed\JavaRManagedRuntime.java. Using fallback presentation compiler.
+2026.07.19 21:39:34 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\managed\JavaRManagedRuntime.java. Using fallback presentation compiler.
+2026.07.19 21:39:37 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\managed\JavaRManagedRuntime.java. Using fallback presentation compiler.
+2026.07.19 21:39:38 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\managed\JavaRManagedRuntime.java. Using fallback presentation compiler.
+2026.07.19 21:40:01 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\managed\JavaRManagedRuntime.java. Using fallback presentation compiler.
+2026.07.19 21:40:02 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\managed\JavaRManagedRuntime.java. Using fallback presentation compiler.
+2026.07.19 21:40:02 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\managed\JavaRManagedRuntime.java. Using fallback presentation compiler.
+2026.07.19 21:40:03 WARN  no build target for: D:\javar-demo\src\main\java\com\javar\demo\App.java
+2026.07.19 21:42:15 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\managed\JavaRManagedRuntime.java. Using fallback presentation compiler.
+2026.07.19 21:43:03 INFO  no build target found for D:\javar-demo\src\main\java\com\javar\demo\App.java. Using fallback presentation compiler.
+2026.07.19 22:03:12 WARN  no build target for: G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\TelemetryReporter.java
+2026.07.19 22:06:12 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\TelemetryReporter.java. Using fallback presentation compiler.
+2026.07.19 22:35:56 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\TelemetryReporter.java. Using fallback presentation compiler.
+2026.07.19 22:35:56 WARN  no build target for: G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\TelemetryReporter.java
+2026.07.19 22:35:56 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\TelemetryReporter.java. Using fallback presentation compiler.
+2026.07.19 22:35:56 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\TelemetryReporter.java. Using fallback presentation compiler.
+2026.07.19 22:36:20 INFO  Shutting down server
+2026.07.19 22:36:20 INFO  Memory monitor stopped
+2026.07.19 22:36:20 INFO  shutting down Metals
+2026.07.19 22:36:20 INFO  Exiting server

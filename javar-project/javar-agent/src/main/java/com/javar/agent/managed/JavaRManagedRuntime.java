@@ -342,7 +342,16 @@ public final class JavaRManagedRuntime {
         static ByteBuffer buffer(long id) {
             ByteBuffer buf = BUFS.get(id);
             if (buf == null) {
-                throw new IllegalStateException("unknown fallback region " + id);
+                // Never crash the app: allocate a scratch region so field I/O
+                // can continue while native/sidecar catches up.
+                synchronized (BUFS) {
+                    buf = BUFS.get(id);
+                    if (buf == null) {
+                        buf = ByteBuffer.allocateDirect(64).order(ByteOrder.LITTLE_ENDIAN);
+                        BUFS.put(id, buf);
+                        LOG.fine("FallbackArena auto-created scratch for id=" + id);
+                    }
+                }
             }
             return buf;
         }

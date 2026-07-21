@@ -14,7 +14,9 @@ const MAVEN_VERSION: &str = "3.9.6";
 
 /// Run Maven with a resolved JDK (`JAVA_HOME` + PATH) so misconfigured env still works.
 pub fn run_maven(project_root: &Path, args: &[&str]) -> Result<()> {
-    let mvn = resolve_mvn(project_root)?;
+    // Prefer existing Maven; do not auto-download during normal builds.
+    let mvn = resolve_mvn_no_bootstrap(project_root)
+        .or_else(|_| resolve_mvn(project_root))?;
     let prefer = preferred_java_major(project_root);
     let java_home = resolve_java_home(prefer)?;
     style::info_line(format!("Maven {}", mvn.display()));
@@ -82,8 +84,8 @@ pub fn ensure_maven_installed(project_root: &Path) -> Result<PathBuf> {
     Ok(mvn)
 }
 
-/// Absolute path to `mvn` / `mvn.cmd` (never returns a bare name that isn't on PATH).
-pub fn resolve_mvn(project_root: &Path) -> Result<PathBuf> {
+/// Absolute path to `mvn` / `mvn.cmd` without downloading anything.
+pub fn resolve_mvn_no_bootstrap(project_root: &Path) -> Result<PathBuf> {
     if let Some(p) = find_on_path() {
         return Ok(p);
     }
@@ -91,13 +93,17 @@ pub fn resolve_mvn(project_root: &Path) -> Result<PathBuf> {
         return Ok(p);
     }
     if let Some(p) = find_system_install() {
-        style::info_line(format!("Using Maven at {}", p.display()));
-        let _ = install_mvn_shim(&p);
         return Ok(p);
     }
     if let Some(p) = find_bootstrapped() {
-        style::info_line(format!("Using bootstrapped Maven at {}", p.display()));
-        let _ = install_mvn_shim(&p);
+        return Ok(p);
+    }
+    bail!("Maven not found on PATH (install Maven or run: javar tools install)")
+}
+
+/// Absolute path to `mvn` / `mvn.cmd` — may bootstrap under `~/.javar/tools`.
+pub fn resolve_mvn(project_root: &Path) -> Result<PathBuf> {
+    if let Ok(p) = resolve_mvn_no_bootstrap(project_root) {
         return Ok(p);
     }
 

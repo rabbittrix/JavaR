@@ -3,11 +3,13 @@
 
 mod dashboard;
 mod embed;
+mod global_mode;
 mod maven;
 mod setup;
 mod smart_build;
 mod smart_run;
 mod style;
+mod tools_cmd;
 
 use anyhow::{bail, Context, Result};
 use bytes::Bytes;
@@ -98,6 +100,31 @@ enum Commands {
         #[arg(long, default_value = "127.0.0.1:19222")]
         addr: String,
     },
+    /// Make JavaR invisible: inject agent via JAVA_TOOL_OPTIONS for every JVM.
+    Enable {
+        /// Apply to the user environment (all IDEs / `mvn` / `java`).
+        #[arg(long)]
+        global: bool,
+    },
+    /// Remove JavaR from JAVA_TOOL_OPTIONS.
+    Disable {
+        #[arg(long)]
+        global: bool,
+    },
+    /// Optional tool bootstrap (Maven under ~/.javar/tools). Never auto-run.
+    Tools {
+        #[command(subcommand)]
+        action: ToolsCmd,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum ToolsCmd {
+    /// Install / refresh Maven shim (only when you ask).
+    Install {
+        #[arg(default_value = ".")]
+        path: PathBuf,
+    },
 }
 
 fn main() -> Result<()> {
@@ -148,6 +175,21 @@ fn main() -> Result<()> {
         }
         Commands::Status { addr } => cmd_status(&addr),
         Commands::Dashboard { addr } | Commands::Tui { addr } => dashboard::run_dashboard(addr),
+        Commands::Enable { global } => {
+            if !global {
+                bail!("use:  javar enable --global");
+            }
+            global_mode::cmd_enable_global()
+        }
+        Commands::Disable { global } => {
+            if !global {
+                bail!("use:  javar disable --global");
+            }
+            global_mode::cmd_disable_global()
+        }
+        Commands::Tools { action } => match action {
+            ToolsCmd::Install { path } => tools_cmd::cmd_tools_install(&path),
+        },
     }
 }
 
@@ -216,7 +258,7 @@ fn cmd_run(
     flags_only: bool,
     no_core: bool,
     watch_only: bool,
-    auto_yes: bool,
+    _auto_yes: bool,
     args: &[String],
 ) -> Result<()> {
     style::banner_line("JavaR smart run");
@@ -227,9 +269,8 @@ fn cmd_run(
     let native = embed::resolve_or_extract_native(path);
 
     let mut project = smart_run::SmartProject::discover(path);
-    if !watch_only && !flags_only {
-        project = smart_build::ensure_project_built(&project, auto_yes)?;
-    }
+    // Passive: never prompt to build — warn and continue as watcher if needed.
+    project = smart_build::note_missing_artifacts(&project);
 
     let project_name = smart_run::project_display_name(&project.root);
     style::info_line(smart_run::describe_project(&project));
@@ -242,23 +283,28 @@ fn cmd_run(
     style::info_line(&agent_flag);
     style::info_line(format!("JAVAR_AGENT_ADDR=127.0.0.1:{port}"));
 
-    let want_java = !watch_only && (!args.is_empty() || smart_run::can_smart_launch(&project));
+    let can_launch = !watch_only && (!args.is_empty() || smart_run::can_smart_launch(&project));
 
-    let java_argv = if want_java {
+    let java_argv = if can_launch {
         match smart_run::build_java_launch_args(&project, args, native.as_deref()) {
             Ok(mut v) => {
-                // Surface project name to agent telemetry / dashboard.
                 v.insert(0, format!("-Djavar.project.name={project_name}"));
                 Some(v)
             }
-            Err(e) if args.is_empty() && !watch_only => {
-                warn!("smart java launch skipped: {e:#}");
-                style::warn_line(format!("Java launch skipped: {e:#}"));
+            Err(e) => {
+                // Passive: do not fail — fall back to sidecar watcher.
+                style::warn_line(format!(
+                    "Cannot launch JVM yet ({e:#}). Starting passive watcher — \
+                     build with your IDE/`mvn package`, or enable global mode: \
+                     javar enable --global"
+                ));
                 None
             }
-            Err(e) => return Err(e),
         }
     } else {
+        if watch_only {
+            style::info_line("Watch-only mode — sidecar will track file changes.");
+        }
         None
     };
 
@@ -312,11 +358,16 @@ fn cmd_run(
         return Ok(());
     }
 
+    // Passive watcher: keep sidecar alive until Ctrl+C.
     if let Some(mut child) = core_child {
+        style::ok("Passive watcher running — Ctrl+C to stop");
+        style::info_line("Tip: javar enable --global  → every IDE/JVM loads the agent");
         let status = child.wait().context("wait javar-core")?;
         if !status.success() {
             bail!("javar-core exited with {status}");
         }
+    } else {
+        style::warn_line("No sidecar and no JVM launch — nothing to do.");
     }
 
     Ok(())

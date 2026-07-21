@@ -13,7 +13,7 @@ export function activate(context: vscode.ExtensionContext): void {
   statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
   statusBar.command = "javar.forceResync";
   statusBar.text = "$(flame) JavaR: Idle";
-  statusBar.tooltip = "JavaR Cockpit — Force Re-sync";
+  statusBar.tooltip = "JavaR Cockpit — Force Re-sync (sidecar + telemetry only)";
   statusBar.show();
   context.subscriptions.push(statusBar);
 
@@ -23,7 +23,7 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.commands.registerCommand("javar.connect", () => connectAndPoll(regions)),
     vscode.commands.registerCommand("javar.forceResync", () => forceResync()),
-    vscode.commands.registerCommand("javar.startCli", () => startCli()),
+    vscode.commands.registerCommand("javar.startCli", () => startSidecar()),
     vscode.commands.registerCommand("javar.openDashboard", () => openDashboard()),
     vscode.commands.registerCommand("javar.installCli", () => installCli())
   );
@@ -37,10 +37,11 @@ async function bootstrap(regions: RegionsProvider): Promise<void> {
   const offer = cfg.get<boolean>("autoInstallCli", true);
   resolvedCli = await ensureJavarCli(configured, offer);
 
+  // Cockpit never launches the app JVM — only sidecar + telemetry.
   if (cfg.get<boolean>("autoStart", true) && vscode.workspace.workspaceFolders?.length) {
     void connectAndPoll(regions);
     if (resolvedCli) {
-      void startCli(true);
+      void startSidecar(true);
     }
   }
 }
@@ -48,7 +49,7 @@ async function bootstrap(regions: RegionsProvider): Promise<void> {
 async function installCli(): Promise<void> {
   const cfg = vscode.workspace.getConfiguration("javar");
   resolvedCli = undefined;
-  resolvedCli = await ensureJavarCli(cfg.get<string>("cliPath", "javar"));
+  resolvedCli = await ensureJavarCli(cfg.get<string>("cliPath", "javar"), true);
 }
 
 export function deactivate(): void {
@@ -87,7 +88,7 @@ async function refreshTelemetry(regions: RegionsProvider): Promise<void> {
     statusBar.text = `$(flame) JavaR: Active${proj} · Heap ${heapMb}MB · Off-heap ${manMb}MB`;
     regions.update(lastTelemetry.regions, lastTelemetry.managed, lastTelemetry.project);
   } catch {
-    statusBar.text = "$(flame) JavaR: Offline";
+    statusBar.text = "$(flame) JavaR: Watching (agent offline)";
   }
 }
 
@@ -114,14 +115,15 @@ async function resolveCliPath(): Promise<string | undefined> {
     return resolvedCli;
   }
   const cfg = vscode.workspace.getConfiguration("javar");
-  resolvedCli = await ensureJavarCli(cfg.get<string>("cliPath", "javar"));
+  resolvedCli = await ensureJavarCli(cfg.get<string>("cliPath", "javar"), true);
   return resolvedCli;
 }
 
-async function startCli(quiet = false): Promise<void> {
+/** Start javar-core sidecar only — never launches the user application. */
+async function startSidecar(quiet = false): Promise<void> {
   if (coreProc && !coreProc.killed) {
     if (!quiet) {
-      vscode.window.showInformationMessage("JavaR CLI already running");
+      vscode.window.showInformationMessage("JavaR sidecar already running");
     }
     return;
   }
@@ -132,8 +134,7 @@ async function startCli(quiet = false): Promise<void> {
   const cfg = vscode.workspace.getConfiguration("javar");
   const folder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? ".";
   const port = cfg.get<number>("agentPort", 19222);
-  const projectName =
-    vscode.workspace.workspaceFolders?.[0]?.name ?? "java-app";
+  const projectName = vscode.workspace.workspaceFolders?.[0]?.name ?? "java-app";
 
   coreProc = spawn(cli, ["run", folder, "--watch-only", "--port", String(port)], {
     cwd: folder,
@@ -149,7 +150,9 @@ async function startCli(quiet = false): Promise<void> {
     statusBar.text = "$(flame) JavaR: Idle";
   });
   if (!quiet) {
-    vscode.window.showInformationMessage(`Started: ${cli} run --watch-only`);
+    vscode.window.showInformationMessage(
+      "JavaR sidecar started (watch-only). Run your app via IDE / mvn — use `javar enable --global` for invisible agent injection."
+    );
   }
 }
 
@@ -169,7 +172,7 @@ async function openDashboard(): Promise<void> {
 function requestTelemetry(host: string, port: number): Promise<Record<string, unknown>> {
   return new Promise((resolve, reject) => {
     const socket = net.createConnection({ host, port }, () => {
-      socket.write(encodeFrame(7, Buffer.alloc(0))); // Telemetry
+      socket.write(encodeFrame(7, Buffer.alloc(0)));
     });
     let buf = Buffer.alloc(0);
     socket.on("data", (chunk) => {
@@ -200,7 +203,7 @@ function sendHotDeploy(host: string, port: number, filePath: string): Promise<vo
       "utf8"
     );
     const socket = net.createConnection({ host, port }, () => {
-      socket.write(encodeFrame(8, payload)); // HotDeploy
+      socket.write(encodeFrame(8, payload));
     });
     socket.on("data", () => {
       socket.end();
@@ -209,7 +212,7 @@ function sendHotDeploy(host: string, port: number, filePath: string): Promise<vo
     socket.on("error", reject);
     setTimeout(() => {
       socket.destroy();
-      resolve(); // fire-and-forget ok
+      resolve();
     }, 1500);
   });
 }
@@ -256,12 +259,11 @@ class RegionsProvider implements vscode.TreeDataProvider<vscode.TreeItem> {
 
   getChildren(): Thenable<vscode.TreeItem[]> {
     const mb = (this.managed / (1024 * 1024)).toFixed(2);
-    const items = [
+    return Promise.resolve([
       new vscode.TreeItem(`Project: ${this.project || "(unknown)"}`),
       new vscode.TreeItem(`Managed regions: ${this.regions}`),
       new vscode.TreeItem(`Off-heap bytes: ${mb} MB`),
-      new vscode.TreeItem("Backend: Panama / JNI (agent)"),
-    ];
-    return Promise.resolve(items);
+      new vscode.TreeItem("Mode: sidecar + telemetry (app via IDE / JAVA_TOOL_OPTIONS)"),
+    ]);
   }
 }

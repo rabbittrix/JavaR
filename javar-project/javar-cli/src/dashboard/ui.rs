@@ -228,7 +228,6 @@ fn draw_hot_reload(frame: &mut Frame, area: Rect, app: &App) {
         .split(area);
 
     let reloads = app.agent.telemetry.reload_count;
-    // Rough estimate: ~8s average cold restart avoided per structural reload.
     let saved_secs = reloads.saturating_mul(8);
     let summary = Paragraph::new(vec![
         Line::from(format!("Shadow / redefine events: {reloads}")),
@@ -245,25 +244,45 @@ fn draw_hot_reload(frame: &mut Frame, area: Rect, app: &App) {
     );
     frame.render_widget(summary, chunks[0]);
 
-    let items: Vec<ListItem> = app
-        .shadows
-        .iter()
-        .map(|s| {
-            ListItem::new(Line::from(vec![
-                Span::styled(
-                    format!("[{}] ", s.version),
-                    Style::default().fg(ORANGE).add_modifier(Modifier::BOLD),
-                ),
-                Span::raw(format!("{} — {}", s.class_name, s.note)),
-            ]))
-        })
-        .collect();
-    let list = List::new(items).block(
+    let header = Row::new(vec!["Time", "Class", "Change", "Version"])
+        .style(Style::default().fg(CYAN).add_modifier(Modifier::BOLD));
+    let rows: Vec<Row> = if app.history.is_empty() {
+        vec![Row::new(vec![
+            "—".to_string(),
+            "(awaiting reload)".to_string(),
+            "—".to_string(),
+            "—".to_string(),
+        ])]
+    } else {
+        app.history
+            .iter()
+            .take(24)
+            .map(|e| {
+                Row::new(vec![
+                    e.timestamp.clone(),
+                    e.class_name.clone(),
+                    e.change_type.clone(),
+                    e.version.clone(),
+                ])
+            })
+            .collect()
+    };
+    let table = Table::new(
+        rows,
+        [
+            Constraint::Length(10),
+            Constraint::Min(24),
+            Constraint::Length(12),
+            Constraint::Length(8),
+        ],
+    )
+    .header(header)
+    .block(
         Block::default()
             .borders(Borders::ALL)
-            .title("Active shadow / reload history"),
+            .title("Reload history (Timestamp · Class · Change · Version)"),
     );
-    frame.render_widget(list, chunks[1]);
+    frame.render_widget(table, chunks[1]);
 }
 
 fn draw_gc(frame: &mut Frame, area: Rect, app: &App) {

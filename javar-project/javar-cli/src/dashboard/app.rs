@@ -68,10 +68,11 @@ pub struct LogLine {
 }
 
 #[derive(Debug, Clone)]
-pub struct ShadowEntry {
+pub struct ReloadEvent {
+    pub timestamp: String,
     pub class_name: String,
+    pub change_type: String,
     pub version: String,
-    pub note: String,
 }
 
 pub struct App {
@@ -81,7 +82,7 @@ pub struct App {
     pub java: JavaProcSnapshot,
     pub heap_history: VecDeque<u64>,
     pub managed_history: VecDeque<u64>,
-    pub shadows: Vec<ShadowEntry>,
+    pub history: Vec<ReloadEvent>,
     pub logs: VecDeque<LogLine>,
     pub last_reload_count: u64,
     pub ticks: u64,
@@ -98,7 +99,7 @@ impl App {
             java: JavaProcSnapshot::default(),
             heap_history: VecDeque::with_capacity(64),
             managed_history: VecDeque::with_capacity(64),
-            shadows: Vec::new(),
+            history: Vec::new(),
             logs: VecDeque::with_capacity(200),
             last_reload_count: 0,
             ticks: 0,
@@ -133,35 +134,50 @@ impl App {
         push_hist(&mut self.heap_history, t.java_heap_used, self.history_cap);
         push_hist(&mut self.managed_history, t.javar_managed, self.history_cap);
 
-        let reload_count = t.reload_count;
-        if reload_count > self.last_reload_count {
-            let delta = reload_count - self.last_reload_count;
-            self.push_log(format!(
-                "bytecode injection / redefine ×{delta} (total {reload_count})"
-            ));
-            self.shadows.insert(
-                0,
-                ShadowEntry {
-                    class_name: "reload-batch".into(),
-                    version: format!("v{reload_count}"),
-                    note: format!("+{delta} class update(s) via agent"),
-                },
-            );
-            if self.shadows.len() > 40 {
-                self.shadows.truncate(40);
+        // Prefer agent-provided detailed history; fall back to count deltas.
+        if !t.reload_history.is_empty() {
+            self.history = t
+                .reload_history
+                .iter()
+                .map(|e| ReloadEvent {
+                    timestamp: short_ts(&e.ts),
+                    class_name: e.class_name.clone(),
+                    change_type: if e.change_type.is_empty() {
+                        "Body".into()
+                    } else {
+                        e.change_type.clone()
+                    },
+                    version: if e.version > 0 {
+                        format!("v{}", e.version)
+                    } else {
+                        "—".into()
+                    },
+                })
+                .collect();
+            self.last_reload_count = t.reload_count;
+        } else {
+            let reload_count = t.reload_count;
+            if reload_count > self.last_reload_count {
+                let delta = reload_count - self.last_reload_count;
+                self.push_log(format!(
+                    "bytecode injection / redefine ×{delta} (total {reload_count})"
+                ));
+                self.history.insert(
+                    0,
+                    ReloadEvent {
+                        timestamp: Local::now().format("%H:%M:%S").to_string(),
+                        class_name: "reload-batch".into(),
+                        change_type: "Body".into(),
+                        version: format!("v{reload_count}"),
+                    },
+                );
+                if self.history.len() > 40 {
+                    self.history.truncate(40);
+                }
+                self.last_reload_count = reload_count;
+            } else if self.last_reload_count == 0 && reload_count > 0 {
+                self.last_reload_count = reload_count;
             }
-            self.last_reload_count = reload_count;
-        } else if self.last_reload_count == 0 && reload_count > 0 {
-            self.last_reload_count = reload_count;
-       }
-
-        // Seed shadow list from agent detail when empty but connected
-        if self.shadows.is_empty() && self.agent.connected && self.ticks % 10 == 1 {
-            self.shadows.push(ShadowEntry {
-                class_name: "(awaiting structural reload)".into(),
-                version: "—".into(),
-                note: "Shadow classes appear when schema changes land".into(),
-            });
         }
 
         if self.ticks % 15 == 0 {
@@ -177,6 +193,14 @@ impl App {
             ));
         }
     }
+}
+
+fn short_ts(ts: &str) -> String {
+    // ISO-8601 → HH:MM:SS when possible
+    if let Some(t) = ts.split('T').nth(1) {
+        return t.chars().take(8).collect();
+    }
+    ts.chars().take(19).collect()
 }
 
 fn push_hist(q: &mut VecDeque<u64>, v: u64, cap: usize) {

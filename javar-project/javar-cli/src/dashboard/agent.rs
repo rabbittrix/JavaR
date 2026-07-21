@@ -28,6 +28,20 @@ pub struct AgentTelemetry {
     pub offheap_backend: String,
     #[serde(default)]
     pub project_name: String,
+    #[serde(default)]
+    pub reload_history: Vec<ReloadEventDto>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct ReloadEventDto {
+    #[serde(default)]
+    pub ts: String,
+    #[serde(default)]
+    pub class_name: String,
+    #[serde(default)]
+    pub change_type: String,
+    #[serde(default)]
+    pub version: i64,
 }
 
 #[derive(Debug, Clone)]

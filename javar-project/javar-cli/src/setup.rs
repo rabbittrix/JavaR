@@ -39,12 +39,8 @@ pub fn cmd_setup() -> Result<()> {
     install_core_sidecar()?;
     prepend_user_path(&embed::javar_bin_dir())?;
 
-    // Maven for app builds: bootstrap under ~/.javar/tools + shim on PATH.
-    let cwd = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-    match crate::maven::ensure_maven_installed(&cwd) {
-        Ok(p) => style::ok(format!("Maven → {}", p.display())),
-        Err(e) => style::warn_line(format!("Maven bootstrap: {e:#}")),
-    }
+    style::info_line("Optional: javar tools install  — bootstrap Maven under ~/.javar/tools");
+    style::info_line("Invisible mode: javar enable --global  — JAVA_TOOL_OPTIONS for every JVM");
 
     check_tool("java", &["-version"]);
     check_tool_maven();
@@ -277,10 +273,10 @@ fn check_tool(name: &str, args: &[&str]) {
 
 fn check_tool_maven() {
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-    match crate::maven::resolve_mvn(&cwd) {
+    match crate::maven::resolve_mvn_no_bootstrap(&cwd) {
         Ok(p) => style::ok(format!("maven found ({})", p.display())),
         Err(_) => style::warn_line(
-            "maven not found — `javar run` / `javar build` will locate or bootstrap it",
+            "maven not on PATH — optional; run `javar tools install` or use your IDE build",
         ),
     }
 }

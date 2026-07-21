@@ -215,6 +215,12 @@ public final class AgentSocketServer {
             if (result.success) {
                 reloadCount.incrementAndGet();
                 String state = structural ? "shadow" : "redefined";
+                String changeType = structural ? "Structural" : "Body";
+                int ver = structural ? JsonMini.intField(headerJson, "version") : 0;
+                if (ver < 0) {
+                    ver = (int) reloadCount.get();
+                }
+                telemetry.recordReload(className, changeType, ver);
                 return encodeFrame(KIND_STATUS, jsonStatus(state, result.message));
             }
             return encodeFrame(KIND_ERROR, jsonStatus("error", result.message));

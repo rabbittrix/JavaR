@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  <b>Zero-Restart Java</b> — self-bootstrapping CLI · Spring Boot · Maven auto-install · Rust off-heap<br/>
+  <b>Zero-Restart Java</b> — invisible agent via <code>JAVA_TOOL_OPTIONS</code> · Spring Boot · Rust off-heap<br/>
   by <b>Roberto de Souza</b> (<a href="mailto:rabbittrix@hotmail.com">rabbittrix@hotmail.com</a>)
 </p>
 
@@ -22,87 +22,98 @@
 
 # JavaR
 
-**One binary. Zero config.** The `javar` CLI embeds the Java agent and native library, installs itself (and Maven if needed) on your PATH, and smart-launches Maven, Gradle, and **Spring Boot** apps.
+**One binary. Zero friction.** Enable JavaR once — every IDE and CLI JVM loads the agent. No need to wrap your app with `javar run`.
 
-## Install
-
-**Windows (PowerShell):**
+## Quick start (recommended)
 
 ```powershell
-iwr https://javar.dev/install.ps1 | iex
+# 1) Install CLI
+iwr https://javar.dev/install.ps1 | iex          # Windows
+# curl -fsSL https://javar.dev/install.sh | sh  # Linux / macOS
+
+# 2) Extract agent + native lib, then enable invisible mode
+javar setup
+javar enable --global
+
+# 3) Restart your IDE / terminal, then run your app as usual
+mvn spring-boot:run
+# or:  java -jar target/my-app.jar
+# or:  IDE Run / Debug
+
+# 4) Telemetry (optional)
+javar dashboard
 ```
 
-**Linux / macOS:**
+`javar enable --global` sets the **user** environment variable:
+
+```text
+JAVA_TOOL_OPTIONS=-javaagent:%USERPROFILE%/.javar/bin/javar-agent.jar=port=19222 -Djavar.native.path=%USERPROFILE%/.javar/bin/javar_core.dll
+```
+
+(Linux/macOS uses `~/.javar/bin/…` with forward slashes.)
+
+Disable later:
 
 ```bash
-curl -fsSL https://javar.dev/install.sh | sh
+javar disable --global
 ```
 
-GitHub raw mirrors:
+---
 
-```powershell
-irm https://raw.githubusercontent.com/rabbittrix/JavaR/main/scripts/install.ps1 | iex
-```
+## Install mirrors
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/rabbittrix/JavaR/main/scripts/install.sh | sh
-```
+| Platform | Command |
+|----------|---------|
+| Windows | `irm https://raw.githubusercontent.com/rabbittrix/JavaR/main/scripts/install.ps1 \| iex` |
+| Unix | `curl -fsSL https://raw.githubusercontent.com/rabbittrix/JavaR/main/scripts/install.sh \| sh` |
 
-The installer:
+Scripts in-repo: [`scripts/install.ps1`](scripts/install.ps1) · [`scripts/install.sh`](scripts/install.sh)
 
-1. Places the CLI in `~/.javar/bin` and runs `javar setup`
-2. Extracts the **embedded** agent JAR + native lib
-3. Bootstraps **Apache Maven** into `~/.javar/tools` when missing and adds a `mvn` shim on PATH
-4. Installs the `javar-core` sidecar for file watching
+---
 
-**VS Code / Cursor:** install the **JavaR Cockpit** extension (`jrsf.javar`). It offers **automatic CLI install** if `javar` is not on PATH.
+## CLI reference
 
-## Run
+| Command | Purpose |
+|---------|---------|
+| `javar setup` | Extract embedded agent JAR + native lib to `~/.javar/bin`, install CLI + sidecar, update PATH |
+| `javar enable --global` | Inject agent via user `JAVA_TOOL_OPTIONS` (IDE-agnostic) |
+| `javar disable --global` | Remove JavaR flags from `JAVA_TOOL_OPTIONS` |
+| `javar tools install` | **Optional** — bootstrap Apache Maven under `~/.javar/tools` + `mvn` shim (never auto-prompted) |
+| `javar build [PATH]` | Explicit Maven `clean package` / Gradle `build` |
+| `javar run [PATH]` | Sidecar + optional JVM launch; **never prompts to build** — warns and watches if classes are missing |
+| `javar run --watch-only` | Sidecar / file watcher only (what the VS Code Cockpit starts) |
+| `javar run --flags-only` | Print the resolved `-javaagent` / `java` line |
+| `javar run -- com.example.App` | Launch with discovered/explicit main (if classes exist) |
+| `javar status` | Ping agent + print telemetry |
+| `javar dashboard` / `javar tui` | Control Center TUI (project name, heap vs off-heap, **reload history**) |
+| `javar init [PATH]` | Scaffold `javar.toml` + sample main |
 
-```bash
-# In any Maven / Gradle / Spring Boot / javar.toml project:
-javar run
-```
+### Passive `javar run`
 
-JavaR will:
+- Does **not** ask `Build now? (Y/n)`
+- Does **not** auto-install Maven (use `javar tools install` if you need it)
+- If `target/classes` / Boot jar is missing → warning + **passive watcher** (exit 0 path for sidecar)
+- Prefer invisible mode for day-to-day app launches
 
-1. Extract the embedded agent + native lib to `~/.javar/bin/` if needed  
-2. Detect Maven / Gradle / **Spring Boot** and offer to build (`javar build`)  
-3. Auto-install Maven into `~/.javar/tools` when the project is Maven and `mvn` is missing  
-4. Launch Spring Boot via the executable fat jar (`java -jar`) when present  
-5. Show the **project name** on `javar dashboard` and in the VS Code status bar  
-
-```bash
-javar setup                 # agent + native + Maven shim + PATH
-javar build                 # Maven/Gradle package (Spring Boot fat jar)
-javar run                   # smart launch with embedded -javaagent
-javar run --watch-only      # sidecar only (IDE cockpit)
-javar run -- com.example.App
-javar dashboard             # Control Center TUI (shows project name)
-javar status
-```
+---
 
 ## Spring Boot
 
+Use the correct plugin id: `spring-boot-maven-plugin` (not `maven-spring-boot-plugin`).
+
 ```bash
-cd my-spring-app
-javar run          # builds if needed, then java -javaagent:… -jar target/*.jar
+javar enable --global
+mvn -DskipTests package
+mvn spring-boot:run
+# other terminal:
+javar dashboard
 ```
 
-- Detects `spring-boot` in `pom.xml`
-- Prefers `<start-class>` / `<mainClass>`
-- Uses the packaged Boot jar when available; otherwise `target/classes` + Maven runtime classpath
+JavaR detects Spring Boot from `pom.xml`, prefers `<start-class>` / `<mainClass>`, and can launch a fat jar when you explicitly use `javar run` after `mvn package`.
 
-## What you get
+---
 
-| Feature | Detail |
-|---------|--------|
-| Structural hot-reload | Shadow classes `Original$JavaR_vN` — no JVM restart |
-| Off-heap memory | `@JavaRManaged` primitives live in Rust |
-| Maven auto-install | Downloaded under `~/.javar/tools`, shim in `~/.javar/bin` |
-| Spring Boot | Fat-jar launch + dependency classpath fallback |
-| Control Center | `javar dashboard` — project name, heap vs off-heap |
-| VS Code Cockpit | Extension `jrsf.javar` — auto CLI install + telemetry |
+## Off-heap (`@JavaRManaged`)
 
 ```java
 import com.javar.agent.managed.JavaRManaged;
@@ -115,6 +126,40 @@ public class SensorReading {
 }
 ```
 
+---
+
+## What you get
+
+| Feature | Detail |
+|---------|--------|
+| Invisible agent | `JAVA_TOOL_OPTIONS` → IntelliJ, Eclipse, VS Code, `mvn`, `java` |
+| Embedded assets | Agent JAR + native lib inside the CLI; extracted to `~/.javar/bin` |
+| Structural hot-reload | Shadow classes `Original$JavaR_vN` — no JVM restart |
+| Off-heap memory | `@JavaRManaged` primitives live in Rust (Panama / JNI) |
+| Control Center | Reload history: **time · class · change · version** |
+| VS Code Cockpit | Extension `jrsf.javar` — sidecar + telemetry + Force Re-sync (**never launches your app**) |
+
+---
+
+## VS Code / Cursor
+
+Install **JavaR Cockpit** (`jrsf.javar`) from the Marketplace, or:
+
+```bash
+code --install-extension vscode-javar/javar-0.1.8.vsix
+```
+
+The extension only:
+
+1. Ensures the CLI is installed (optional prompt)
+2. Starts `javar run --watch-only` (sidecar)
+3. Polls agent telemetry on `127.0.0.1:19222`
+4. Provides **Force Re-sync**
+
+Run the app via your IDE or `mvn` after `javar enable --global`.
+
+---
+
 ## Dev build (contributors)
 
 ```bash
@@ -122,6 +167,7 @@ cd javar-project
 cargo build --release -p javar-core
 cargo build --release -p javar-cli   # build.rs embeds agent via internal Maven
 ./target/release/javar setup
+./target/release/javar enable --global
 ```
 
 ---
