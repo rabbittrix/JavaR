@@ -13,12 +13,48 @@ use std::process::{Command, Stdio};
 const MAVEN_VERSION: &str = "3.9.6";
 
 /// Run Maven with a resolved JDK (`JAVA_HOME` + PATH) so misconfigured env still works.
+/// Always pins `-Dmaven.compiler.release` when a target can be detected.
 pub fn run_maven(project_root: &Path, args: &[&str]) -> Result<()> {
+    if let Some(release) = crate::version_sync::compiler_release_target(project_root)
+        .or_else(crate::version_sync::runtime_java_major)
+    {
+        // Avoid duplicating -Dmaven.compiler.release if caller already set it.
+        let already = args.iter().any(|a| a.starts_with("-Dmaven.compiler.release="));
+        if already {
+            return run_maven_with_java(project_root, Some(release), args);
+        }
+        return run_maven_aligned(project_root, release, args);
+    }
+    let prefer = preferred_java_major(project_root);
+    run_maven_with_java(project_root, prefer, args)
+}
+
+/// Force `-Dmaven.compiler.release` (and source/target) to `release`, using a matching JDK.
+pub fn run_maven_aligned(project_root: &Path, release: u32, goals: &[&str]) -> Result<()> {
+    let mut args: Vec<String> = Vec::new();
+    args.push(format!("-Dmaven.compiler.release={release}"));
+    args.push(format!("-Dmaven.compiler.source={release}"));
+    args.push(format!("-Dmaven.compiler.target={release}"));
+    args.push(format!("-Djava.version={release}"));
+    for g in goals {
+        // Skip duplicate release flags from callers that already included them.
+        if g.starts_with("-Dmaven.compiler.") || g.starts_with("-Djava.version=") {
+            continue;
+        }
+        args.push((*g).to_string());
+    }
+    let refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+    style::info_line(format!(
+        "Force compatibility: -Dmaven.compiler.release={release}"
+    ));
+    run_maven_with_java(project_root, Some(release), &refs)
+}
+
+fn run_maven_with_java(project_root: &Path, prefer_major: Option<u32>, args: &[&str]) -> Result<()> {
     // Prefer existing Maven; do not auto-download during normal builds.
     let mvn = resolve_mvn_no_bootstrap(project_root)
         .or_else(|_| resolve_mvn(project_root))?;
-    let prefer = preferred_java_major(project_root);
-    let java_home = resolve_java_home(prefer)?;
+    let java_home = resolve_java_home(prefer_major)?;
     style::info_line(format!("Maven {}", mvn.display()));
     style::info_line(format!("JAVA_HOME={}", java_home.display()));
 

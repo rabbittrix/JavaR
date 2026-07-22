@@ -20,6 +20,10 @@ pub struct BridgeConfig {
 pub trait AgentBridge: Send + Sync {
     async fn send(&self, msg: Message) -> Result<()>;
     async fn close(&self) -> Result<()>;
+    /// Point the bridge at a different agent port (port migration / project match).
+    async fn retarget(&self, _addr: String) -> Result<()> {
+        Ok(())
+    }
 }
 
 /// Shared handle type used by the core runtime.
@@ -54,6 +58,10 @@ pub mod jni_bridge {
 
     #[async_trait]
     impl AgentBridge for JniBridge {
+        async fn retarget(&self, _addr: String) -> Result<()> {
+            Ok(())
+        }
+
         async fn send(&self, msg: Message) -> Result<()> {
             // JNI calls must run on an attached thread; keep this path for Phase-1.5.
             let vm = JVM

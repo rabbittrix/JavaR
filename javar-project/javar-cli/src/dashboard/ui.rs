@@ -6,7 +6,8 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::symbols;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{
-    Axis, Block, Borders, Chart, Dataset, Gauge, List, ListItem, Paragraph, Row, Table, Tabs,
+    Axis, Block, Borders, Clear, Chart, Dataset, Gauge, List, ListItem, Paragraph, Row, Table,
+    Tabs,
 };
 use ratatui::Frame;
 
@@ -15,10 +16,15 @@ const CYAN: Color = Color::Rgb(0, 229, 255);
 const DIM: Color = Color::Rgb(120, 124, 140);
 
 pub fn draw(frame: &mut Frame, app: &App) {
+    let header_h = if app.agent.telemetry.sync_alert.is_empty() {
+        4
+    } else {
+        6
+    };
     let root = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3),
+            Constraint::Length(header_h),
             Constraint::Length(3),
             Constraint::Min(8),
             Constraint::Length(2),
@@ -34,36 +40,196 @@ pub fn draw(frame: &mut Frame, app: &App) {
         Tab::Logs => draw_logs(frame, root[2], app),
     }
     draw_footer(frame, root[3]);
+
+    // Centered modal over the live dashboard.
+    if app.show_picker {
+        draw_process_picker_modal(frame, app);
+    }
+}
+
+fn centered_rect(percent_x: u16, percent_y: u16, area: Rect) -> Rect {
+    let popup = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Percentage((100 - percent_y) / 2),
+            Constraint::Percentage(percent_y),
+            Constraint::Percentage((100 - percent_y) / 2),
+        ])
+        .split(area);
+    Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage((100 - percent_x) / 2),
+            Constraint::Percentage(percent_x),
+            Constraint::Percentage((100 - percent_x) / 2),
+        ])
+        .split(popup[1])[1]
+}
+
+fn draw_process_picker_modal(frame: &mut Frame, app: &App) {
+    // Large centered popup so the process list is impossible to miss.
+    let area = centered_rect(78, 62, frame.area());
+    frame.render_widget(Clear, area);
+
+    let outer = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(ORANGE).add_modifier(Modifier::BOLD))
+        .title(Span::styled(
+            " SELECT JAVA PROCESS ",
+            Style::default()
+                .fg(Color::Black)
+                .bg(ORANGE)
+                .add_modifier(Modifier::BOLD),
+        ));
+    frame.render_widget(outer, area);
+
+    // Shrink inner areas inside the border.
+    let inner = Layout::default()
+        .direction(Direction::Vertical)
+        .margin(1)
+        .constraints([
+            Constraint::Length(2),
+            Constraint::Min(4),
+            Constraint::Length(2),
+        ])
+        .split(area);
+
+    let subtitle = Paragraph::new(Line::from(vec![
+        Span::styled(
+            format!(
+                " {} live agent(s) in ~/.javar/agents  ·  Spring/user apps on top ",
+                app.available_processes.len()
+            ),
+            Style::default().fg(CYAN),
+        ),
+    ]));
+    frame.render_widget(subtitle, inner[0]);
+
+    let items: Vec<ListItem> = if app.available_processes.is_empty() {
+        vec![
+            ListItem::new(Line::from(Span::styled(
+                "  No user apps with a live JavaR agent yet.",
+                Style::default().fg(ORANGE),
+            ))),
+            ListItem::new(Line::from(Span::styled(
+                "  IDE language servers are hidden. Restart your Spring Boot / app JVM",
+                Style::default().fg(DIM),
+            ))),
+            ListItem::new(Line::from(Span::styled(
+                "  so it can bind 19222 (after updating ~/.javar/bin/javar-agent.jar).",
+                Style::default().fg(DIM),
+            ))),
+        ]
+    } else {
+        app.available_processes
+            .iter()
+            .enumerate()
+            .map(|(i, p)| {
+                let tag = if p.is_user_project {
+                    Span::styled("[APP] ", Style::default().fg(CYAN).add_modifier(Modifier::BOLD))
+                } else {
+                    Span::styled("[JVM] ", Style::default().fg(DIM))
+                };
+                ListItem::new(Line::from(vec![
+                    Span::styled(format!(" {}. ", i + 1), Style::default().fg(DIM)),
+                    tag,
+                    Span::raw(p.picker_label()),
+                ]))
+            })
+            .collect()
+    };
+
+    let list = List::new(items)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(" ↑/↓ move  ·  Enter connect ")
+                .border_style(Style::default().fg(CYAN)),
+        )
+        .highlight_style(
+            Style::default()
+                .fg(Color::Black)
+                .bg(CYAN)
+                .add_modifier(Modifier::BOLD),
+        )
+        .highlight_symbol("▶ ");
+
+    let mut state = app.picker_state.clone();
+    frame.render_stateful_widget(list, inner[1], &mut state);
+
+    let hint = Paragraph::new(Line::from(vec![
+        Span::styled(
+            " Press 'p' to change process | 'q' to quit ",
+            Style::default()
+                .fg(Color::White)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::styled("  (Esc closes picker)", Style::default().fg(DIM)),
+    ]))
+    .alignment(ratatui::layout::Alignment::Center);
+    frame.render_widget(hint, inner[2]);
 }
 
 fn draw_header(frame: &mut Frame, area: Rect, app: &App) {
     let status = if app.agent.connected {
-        Span::styled("● ACTIVE", Style::default().fg(CYAN).add_modifier(Modifier::BOLD))
+        Span::styled(
+            "● ACTIVE",
+            Style::default().fg(CYAN).add_modifier(Modifier::BOLD),
+        )
     } else {
         Span::styled("○ OFFLINE", Style::default().fg(ORANGE))
     };
-    let project = if app.agent.telemetry.project_name.is_empty() {
-        Span::raw("")
+    let monitor = Span::styled(
+        app.monitored_label(),
+        Style::default()
+            .fg(Color::White)
+            .add_modifier(Modifier::BOLD),
+    );
+    let others = app.others_hint();
+    let mut lines = vec![
+        Line::from(vec![
+            Span::styled(
+                " JavaR ",
+                Style::default().fg(ORANGE).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled("Control Center  ", Style::default().fg(Color::White)),
+            status,
+            Span::raw("  "),
+            Span::styled(app.agent_addr.clone(), Style::default().fg(DIM)),
+            Span::raw("  "),
+            Span::styled(app.agent.detail.clone(), Style::default().fg(DIM)),
+        ]),
+        Line::from(vec![
+            Span::raw(" "),
+            monitor,
+            Span::raw("  "),
+            Span::styled(others, Style::default().fg(CYAN)),
+        ]),
+    ];
+    if !app.agent.telemetry.sync_alert.is_empty() {
+        let alert = &app.agent.telemetry.sync_alert;
+        let bar = if alert.to_uppercase().contains("CRITICAL") {
+            alert.clone()
+        } else {
+            format!("CRITICAL: {alert}")
+        };
+        lines.push(Line::from(Span::styled(
+            format!(" {bar}"),
+            Style::default()
+                .fg(Color::White)
+                .bg(Color::Rgb(180, 30, 40))
+                .add_modifier(Modifier::BOLD),
+        )));
+    }
+    let border = if app.agent.telemetry.sync_alert.is_empty() {
+        Style::default().fg(ORANGE)
     } else {
-        Span::styled(
-            format!("「{}」 ", app.agent.telemetry.project_name),
-            Style::default().fg(CYAN).add_modifier(Modifier::BOLD),
-        )
+        Style::default().fg(Color::Rgb(220, 50, 60))
     };
-    let title = Paragraph::new(Line::from(vec![
-        Span::styled(" JavaR ", Style::default().fg(ORANGE).add_modifier(Modifier::BOLD)),
-        Span::styled("Control Center ", Style::default().fg(Color::White)),
-        project,
-        status,
-        Span::raw("  "),
-        Span::styled(app.agent_addr.clone(), Style::default().fg(DIM)),
-        Span::raw("  "),
-        Span::styled(app.agent.detail.clone(), Style::default().fg(DIM)),
-    ]))
-    .block(
+    let title = Paragraph::new(lines).block(
         Block::default()
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(ORANGE)),
+            .border_style(border),
     );
     frame.render_widget(title, area);
 }
@@ -95,7 +261,10 @@ fn draw_performance(frame: &mut Frame, area: Rect, app: &App) {
         .split(area);
 
     let heap = app.agent.telemetry.java_heap_used;
-    let heap_max = app.agent.telemetry.java_heap_max.max(1);
+    let mut heap_max = app.agent.telemetry.java_heap_max;
+    if heap_max == 0 {
+        heap_max = heap.max(1);
+    }
     let managed = app.agent.telemetry.javar_managed;
     let ratio = (heap as f64 / heap_max as f64).clamp(0.0, 1.0);
 
@@ -106,6 +275,7 @@ fn draw_performance(frame: &mut Frame, area: Rect, app: &App) {
         .label(format!("{} / {}", fmt_bytes(heap), fmt_bytes(heap_max)));
     frame.render_widget(heap_g, chunks[0]);
 
+    let managed_den = managed.max(heap_max).max(1);
     let managed_g = Gauge::default()
         .block(
             Block::default()
@@ -113,7 +283,7 @@ fn draw_performance(frame: &mut Frame, area: Rect, app: &App) {
                 .title("JavaR Off-Heap (managed)"),
         )
         .gauge_style(Style::default().fg(CYAN))
-        .ratio(((managed as f64) / (managed.max(heap_max) as f64)).clamp(0.05, 1.0))
+        .ratio(((managed as f64) / (managed_den as f64)).clamp(0.0, 1.0))
         .label(fmt_bytes(managed));
     frame.render_widget(managed_g, chunks[1]);
 
@@ -227,10 +397,15 @@ fn draw_hot_reload(frame: &mut Frame, area: Rect, app: &App) {
         .constraints([Constraint::Length(4), Constraint::Min(4)])
         .split(area);
 
-    let reloads = app.agent.telemetry.reload_count;
+    let reloads = app
+        .agent
+        .telemetry
+        .reload_count
+        .max(app.history.len() as u64);
+    let hist_n = app.history.len().max(app.agent.telemetry.reload_history.len());
     let saved_secs = reloads.saturating_mul(8);
     let summary = Paragraph::new(vec![
-        Line::from(format!("Shadow / redefine events: {reloads}")),
+        Line::from(format!("Shadow / redefine events: {reloads}   hist={hist_n}")),
         Line::from(format!(
             "Est. restart time saved: {} ({} × ~8s cold start)",
             fmt_duration(saved_secs),
@@ -288,8 +463,15 @@ fn draw_hot_reload(frame: &mut Frame, area: Rect, app: &App) {
 fn draw_gc(frame: &mut Frame, area: Rect, app: &App) {
     let t = &app.agent.telemetry;
     let regions = t.managed_regions;
-    let savings = t.gc_savings.max(t.javar_managed);
-    // Heuristic: each managed region ≈ one young-gen churn cycle avoided per refresh window.
+    let managed = t.javar_managed;
+    let savings = t.gc_savings.max(managed);
+    let heap_used = t.java_heap_used;
+    let heap_max = if t.java_heap_max > 0 {
+        t.java_heap_max
+    } else {
+        heap_used.max(1)
+    };
+    let heap_pct = ((heap_used as f64 / heap_max as f64) * 100.0).clamp(0.0, 100.0);
     let cycles_avoided = regions.saturating_mul(app.ticks.max(1) / 4);
 
     let text = vec![
@@ -298,13 +480,17 @@ fn draw_gc(frame: &mut Frame, area: Rect, app: &App) {
             Style::default().fg(CYAN).add_modifier(Modifier::BOLD),
         )),
         Line::from(""),
-        Line::from(format!("Off-heap regions:     {regions}")),
-        Line::from(format!("Bytes kept off heap:  {}", fmt_bytes(savings))),
-        Line::from(format!("Est. GC cycles avoided: {cycles_avoided}")),
         Line::from(format!(
-            "Loaded classes:       {}",
-            t.loaded_classes
+            "JVM heap:             {} / {}  ({:.0}%)",
+            fmt_bytes(heap_used),
+            fmt_bytes(heap_max),
+            heap_pct
         )),
+        Line::from(format!("Off-heap managed:     {}", fmt_bytes(managed))),
+        Line::from(format!("GC bytes avoided:     {}", fmt_bytes(savings))),
+        Line::from(format!("Off-heap regions:     {regions}")),
+        Line::from(format!("Est. GC cycles saved: {cycles_avoided}")),
+        Line::from(format!("Loaded classes:       {}", t.loaded_classes)),
         Line::from(format!(
             "Bridge backend:       {}",
             if t.offheap_backend.is_empty() {
@@ -353,21 +539,26 @@ fn draw_logs(frame: &mut Frame, area: Rect, app: &App) {
 
 fn draw_footer(frame: &mut Frame, area: Rect) {
     let help = Paragraph::new(Line::from(vec![
-        Span::styled("q", Style::default().fg(ORANGE)),
-        Span::raw(" quit  "),
+        Span::styled(
+            "Press 'p' to change process | 'q' to quit",
+            Style::default()
+                .fg(Color::White)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::raw("   "),
         Span::styled("←/→", Style::default().fg(ORANGE)),
         Span::raw(" tabs  "),
-        Span::styled("1-4", Style::default().fg(ORANGE)),
-        Span::raw(" jump  "),
         Span::styled("r", Style::default().fg(ORANGE)),
         Span::raw(" refresh  "),
         Span::styled("Roberto de Souza", Style::default().fg(DIM)),
-        Span::raw(" · Zero-Restart Java"),
     ]));
     frame.render_widget(help, area);
 }
 
 fn fmt_bytes(n: u64) -> String {
+    // Guard against absurd values (e.g. former -1 → u64::MAX style corruption).
+    const SANE_MAX: u64 = 1 << 50; // 1 PiB ceiling for display
+    let n = n.min(SANE_MAX);
     const KB: f64 = 1024.0;
     const MB: f64 = KB * 1024.0;
     const GB: f64 = MB * 1024.0;

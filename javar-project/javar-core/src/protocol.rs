@@ -28,6 +28,8 @@ pub enum MessageKind {
     HotDeploy = 8,
     /// Structural hot-reload via shadow class (`Original$JavaR_vN`).
     Structural = 9,
+    /// Push notification after a live redefine / shadow install.
+    ReloadEvent = 10,
 }
 
 impl MessageKind {
@@ -42,6 +44,7 @@ impl MessageKind {
             7 => Self::Telemetry,
             8 => Self::HotDeploy,
             9 => Self::Structural,
+            10 => Self::ReloadEvent,
             _ => return None,
         })
     }
@@ -65,6 +68,20 @@ pub struct RedefinePayload {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StatusPayload {
     pub state: String,
+    pub detail: String,
+}
+
+/// Live hot-reload notification from the Java agent → sidecar / dashboard.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReloadEventPayload {
+    pub class_name: String,
+    pub change_type: String,
+    pub version: u32,
+    /// Epoch milliseconds (`System.currentTimeMillis()`).
+    pub ts: u64,
+    #[serde(default)]
+    pub state: String,
+    #[serde(default)]
     pub detail: String,
 }
 
@@ -189,6 +206,26 @@ impl Message {
         Self {
             kind: MessageKind::Ping,
             body: Bytes::new(),
+        }
+    }
+
+    pub fn reload_event(
+        class_name: impl Into<String>,
+        change_type: impl Into<String>,
+        version: u32,
+        ts_ms: u64,
+    ) -> Self {
+        let payload = ReloadEventPayload {
+            class_name: class_name.into(),
+            change_type: change_type.into(),
+            version,
+            ts: ts_ms,
+            state: "redefined".into(),
+            detail: String::new(),
+        };
+        Self {
+            kind: MessageKind::ReloadEvent,
+            body: Bytes::from(serde_json::to_vec(&payload).expect("reload_event json")),
         }
     }
 }

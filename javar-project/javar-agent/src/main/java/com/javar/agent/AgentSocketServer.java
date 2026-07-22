@@ -34,6 +34,11 @@ public final class AgentSocketServer {
     private static final byte KIND_TELEMETRY = 7;
     private static final byte KIND_HOT_DEPLOY = 8;
     private static final byte KIND_STRUCTURAL = 9;
+    private static final byte KIND_RELOAD_EVENT = 10;
+
+    /** Prefer 19222; migrate upward when IDE tools already hold the port. */
+    private static final int PORT_RANGE_START = 19222;
+    private static final int PORT_RANGE_END = 19242;
 
     private final int port;
     private final ClassRedefiner redefiner;
@@ -47,6 +52,7 @@ public final class AgentSocketServer {
     });
 
     private ServerSocket serverSocket;
+    private volatile int boundPort = -1;
 
     public AgentSocketServer(
             int port,
@@ -60,12 +66,71 @@ public final class AgentSocketServer {
     }
 
     public void start() throws IOException {
-        if (!running.compareAndSet(false, true)) {
-            return;
+        int bound = startOrFallback(port);
+        if (bound < 0) {
+            throw new IOException("no free JavaR agent port in "
+                    + PORT_RANGE_START + "-" + PORT_RANGE_END);
         }
-        serverSocket = new ServerSocket(port, 50, InetAddress.getByName("127.0.0.1"));
-        pool.execute(this::acceptLoop);
-        LOG.info("JavaR agent listening on 127.0.0.1:" + port);
+    }
+
+    /**
+     * Bind preferred port, then scan {@code 19222..19232}. Returns the bound port,
+     * or {@code -1} if every candidate failed (caller must NOT crash the host JVM).
+     */
+    public int startOrFallback(int preferredPort) {
+        if (!running.compareAndSet(false, true)) {
+            return boundPort > 0 ? boundPort : preferredPort;
+        }
+        int preferred = preferredPort;
+        if (preferred < PORT_RANGE_START || preferred > PORT_RANGE_END) {
+            preferred = PORT_RANGE_START;
+        }
+        int span = PORT_RANGE_END - PORT_RANGE_START + 1;
+        int[] order = new int[span];
+        int n = 0;
+        order[n++] = preferred;
+        for (int p = PORT_RANGE_START; p <= PORT_RANGE_END; p++) {
+            if (p != preferred) {
+                order[n++] = p;
+            }
+        }
+        IOException last = null;
+        for (int i = 0; i < n; i++) {
+            int tryPort = order[i];
+            try {
+                serverSocket = new ServerSocket(tryPort, 50, InetAddress.getByName("127.0.0.1"));
+                boundPort = tryPort;
+                pool.execute(this::acceptLoop);
+                if (tryPort != preferred) {
+                    LOG.info("JavaR agent port " + preferred + " busy — migrated to 127.0.0.1:"
+                            + tryPort + " (registry will be updated)");
+                } else {
+                    LOG.info("JavaR agent listening on 127.0.0.1:" + tryPort);
+                }
+                return tryPort;
+            } catch (IOException e) {
+                last = e;
+                LOG.fine("port " + tryPort + " unavailable: " + e.getMessage());
+            }
+        }
+        running.set(false);
+        boundPort = -1;
+        String detail = last != null ? last.getMessage() : "no ports available";
+        LOG.warning(
+                "WARNING: JavaR Agent server could not start (port busy), "
+                        + "but the application will continue running without telemetry. "
+                        + "(" + detail + ")");
+        return -1;
+    }
+
+    public int getPort() {
+        if (boundPort > 0) {
+            return boundPort;
+        }
+        if (serverSocket != null && !serverSocket.isClosed()) {
+            return serverSocket.getLocalPort();
+        }
+        return port;
     }
 
     public void stop() {
@@ -78,6 +143,7 @@ public final class AgentSocketServer {
             // ignore
         }
         pool.shutdownNow();
+        AgentRegistry.unregister();
     }
 
     private void acceptLoop() {
@@ -172,12 +238,12 @@ public final class AgentSocketServer {
     private byte[] handleRedefine(byte[] payload, boolean structuralHint) {
         try {
             if (payload.length < 4) {
-                return encodeFrame(KIND_ERROR, jsonStatus("error", "truncated redefine"));
+                return forceFailEvent("?", "truncated redefine");
             }
             ByteBuffer buf = ByteBuffer.wrap(payload).order(ByteOrder.LITTLE_ENDIAN);
             int headerLen = buf.getInt();
             if (headerLen < 0 || 4 + headerLen > payload.length) {
-                return encodeFrame(KIND_ERROR, jsonStatus("error", "bad redefine header"));
+                return forceFailEvent("?", "bad redefine header");
             }
             String headerJson = new String(payload, 4, headerLen, StandardCharsets.UTF_8);
             String className = JsonMini.stringField(headerJson, "class_name");
@@ -185,7 +251,8 @@ public final class AgentSocketServer {
             int start = 4 + headerLen;
             int end = start + bytecodeLen;
             if (className == null || end > payload.length) {
-                return encodeFrame(KIND_ERROR, jsonStatus("error", "invalid redefine payload"));
+                return forceFailEvent(
+                        className == null ? "?" : className, "invalid redefine payload");
             }
             byte[] bytecode = new byte[bytecodeLen];
             System.arraycopy(payload, start, bytecode, 0, bytecodeLen);
@@ -212,21 +279,67 @@ public final class AgentSocketServer {
                 result = redefiner.redefine(className, bytecode);
             }
 
+            long ts = System.currentTimeMillis();
             if (result.success) {
-                reloadCount.incrementAndGet();
-                String state = structural ? "shadow" : "redefined";
-                String changeType = structural ? "Structural" : "Body";
-                int ver = structural ? JsonMini.intField(headerJson, "version") : 0;
-                if (ver < 0) {
-                    ver = (int) reloadCount.get();
+                if (result.cachedOnly && !result.pendingHistory) {
+                    // Wrong JVM / inert cache — still force a TCP ReloadEvent (no hist++).
+                    return encodeFrame(
+                            KIND_RELOAD_EVENT,
+                            jsonReloadEvent(
+                                    className, "Cached", 0, ts, "cached", result.message, true));
                 }
-                telemetry.recordReload(className, changeType, ver);
-                return encodeFrame(KIND_STATUS, jsonStatus(state, result.message));
+                long n = reloadCount.incrementAndGet();
+                String state = structural ? "shadow" : (result.pendingHistory ? "pending" : "redefined");
+                String changeType = structural
+                        ? "Structural"
+                        : (result.pendingHistory ? "Pending" : "Body");
+                int ver = structural ? JsonMini.intField(headerJson, "version") : (int) n;
+                if (ver < 0) {
+                    ver = (int) n;
+                }
+                if (!structural && ver == 0) {
+                    ver = (int) n;
+                }
+                telemetry.clearSyncAlert();
+                telemetry.recordReload(className, changeType, ver, ts);
+                // FORCE TCP write: RELOAD_EVENT on the redefine connection (sidecar ack path).
+                return encodeFrame(
+                        KIND_RELOAD_EVENT,
+                        jsonReloadEvent(className, changeType, ver, ts, state, result.message, true));
             }
-            return encodeFrame(KIND_ERROR, jsonStatus("error", result.message));
+            // Failure path — still emit ReloadEvent so Dashboard history + CRITICAL bar update.
+            String detail = result.message == null ? "redefine failed" : result.message;
+            if (result.versionMismatch) {
+                String alert =
+                        "Version Error — bytecode newer than JVM ("
+                                + className
+                                + "). JavaR expects --release 21. "
+                                + detail;
+                LOG.severe("CRITICAL: " + alert);
+                return forceFailEvent(className, alert);
+            }
+            return forceFailEvent(className, detail);
         } catch (Exception e) {
-            return encodeFrame(KIND_ERROR, jsonStatus("error", e.getMessage()));
+            return forceFailEvent("?", e.getMessage() == null ? "exception" : e.getMessage());
         }
+    }
+
+    /** Always push a failed ReloadEvent over TCP + sticky CRITICAL for the Dashboard. */
+    private byte[] forceFailEvent(String className, String detail) {
+        long ts = System.currentTimeMillis();
+        String msg = detail == null ? "redefine failed" : detail;
+        telemetry.setSyncAlert("CRITICAL: " + msg);
+        telemetry.recordReload(className == null ? "?" : className, "Error", 0, ts);
+        return encodeFrame(
+                KIND_RELOAD_EVENT,
+                jsonReloadEvent(
+                        className == null ? "?" : className,
+                        "Error",
+                        0,
+                        ts,
+                        "error",
+                        msg,
+                        false));
     }
 
     private byte[] handleRollback(byte[] payload) {
@@ -294,6 +407,26 @@ public final class AgentSocketServer {
 
     private static byte[] jsonStatus(String state, String detail) {
         String json = "{\"state\":\"" + escape(state) + "\",\"detail\":\"" + escape(detail) + "\"}";
+        return json.getBytes(StandardCharsets.UTF_8);
+    }
+
+    private static byte[] jsonReloadEvent(
+            String className,
+            String changeType,
+            int version,
+            long tsMs,
+            String state,
+            String detail,
+            boolean success) {
+        String json = "{"
+                + "\"class_name\":\"" + escape(className) + "\","
+                + "\"change_type\":\"" + escape(changeType) + "\","
+                + "\"version\":" + version + ","
+                + "\"ts\":" + tsMs + ","
+                + "\"state\":\"" + escape(state) + "\","
+                + "\"success\":" + success + ","
+                + "\"detail\":\"" + escape(detail) + "\""
+                + "}";
         return json.getBytes(StandardCharsets.UTF_8);
     }
 

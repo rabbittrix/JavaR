@@ -4,12 +4,14 @@
 mod dashboard;
 mod embed;
 mod global_mode;
+mod layout_fix;
 mod maven;
 mod setup;
 mod smart_build;
 mod smart_run;
 mod style;
 mod tools_cmd;
+mod version_sync;
 
 use anyhow::{bail, Context, Result};
 use bytes::Bytes;
@@ -21,7 +23,6 @@ use std::net::TcpStream;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::Duration;
-use tracing::warn;
 use tracing_subscriber::EnvFilter;
 
 /// Embedded agent JAR — produced by `build.rs` via internal Maven before compile.
@@ -100,17 +101,18 @@ enum Commands {
         #[arg(long, default_value = "127.0.0.1:19222")]
         addr: String,
     },
-    /// Make JavaR invisible: inject agent via JAVA_TOOL_OPTIONS for every JVM.
+    /// Legacy: global JAVA_TOOL_OPTIONS mode is removed (cleans leftovers).
     Enable {
-        /// Apply to the user environment (all IDEs / `mvn` / `java`).
         #[arg(long)]
         global: bool,
     },
-    /// Remove JavaR from JAVA_TOOL_OPTIONS.
+    /// Emergency cleanup: strip JAVA_TOOL_OPTIONS / JAVAR_NATIVE_PATH from the Registry.
     Disable {
         #[arg(long)]
         global: bool,
     },
+    /// Disable leftovers and delete ~/.javar completely.
+    Uninstall,
     /// Optional tool bootstrap (Maven under ~/.javar/tools). Never auto-run.
     Tools {
         #[command(subcommand)]
@@ -187,6 +189,7 @@ fn main() -> Result<()> {
             }
             global_mode::cmd_disable_global()
         }
+        Commands::Uninstall => global_mode::cmd_uninstall(),
         Commands::Tools { action } => match action {
             ToolsCmd::Install { path } => tools_cmd::cmd_tools_install(&path),
         },
@@ -261,13 +264,18 @@ fn cmd_run(
     _auto_yes: bool,
     args: &[String],
 ) -> Result<()> {
-    style::banner_line("JavaR smart run");
+    style::banner_line("JavaR run (explicit agent injection)");
 
     // NEVER fail with "jar not found" — write AGENT_BYTES to ~/.javar/bin if needed.
     let agent_abs = embed::ensure_agent_jar(agent)?;
-    let agent_flag = format!("-javaagent:{}=port={}", agent_abs.display(), port);
     let native = embed::resolve_or_extract_native(path);
+    // Pick a free agent port so concurrent `javar run` microservices don't collide.
+    let port = allocate_agent_port(port);
+    let agent_flag = format!("-javaagent:{}=port={}", agent_abs.display(), port);
+    let addr = format!("127.0.0.1:{port}");
 
+    let _ = layout_fix::maybe_fix_src_com_layout(path);
+    // Re-discover after a possible layout move.
     let mut project = smart_run::SmartProject::discover(path);
     // Passive: never prompt to build — warn and continue as watcher if needed.
     project = smart_build::note_missing_artifacts(&project);
@@ -278,25 +286,25 @@ fn cmd_run(
     if let Some(ref n) = native {
         style::ok(format!("Native {}", n.display()));
     } else {
-        style::warn_line("Native lib not found — set JAVAR_NATIVE_PATH for off-heap");
+        style::warn_line("Native lib not found — rebuild javar-core / javar setup");
     }
     style::info_line(&agent_flag);
-    style::info_line(format!("JAVAR_AGENT_ADDR=127.0.0.1:{port}"));
+    style::info_line(format!("Pinned agent → {addr} (watcher sends only here)"));
 
     let can_launch = !watch_only && (!args.is_empty() || smart_run::can_smart_launch(&project));
 
     let java_argv = if can_launch {
         match smart_run::build_java_launch_args(&project, args, native.as_deref()) {
             Ok(mut v) => {
+                // Explicit injection markers — agent registry + Dashboard use these.
                 v.insert(0, format!("-Djavar.project.name={project_name}"));
+                v.insert(0, "-Djavar.launched.by=javar-run".into());
                 Some(v)
             }
             Err(e) => {
-                // Passive: do not fail — fall back to sidecar watcher.
                 style::warn_line(format!(
                     "Cannot launch JVM yet ({e:#}). Starting passive watcher — \
-                     build with your IDE/`mvn package`, or enable global mode: \
-                     javar enable --global"
+                     build with `javar build` / your IDE, then re-run `javar run`"
                 ));
                 None
             }
@@ -321,29 +329,48 @@ fn cmd_run(
         return Ok(());
     }
 
-    let addr = format!("127.0.0.1:{port}");
     let mut core_child = None;
 
+    if let Some(ref _java_argv) = java_argv {
+        // Version Protector — block launch until target/classes matches the runtime JVM.
+        version_sync::ensure_compatible_bytecode(&project)?;
+
+        // Spring Boot zombie: free the usual app port before launch.
+        if smart_run::is_spring_boot(&project.root) {
+            let _ = version_sync::free_tcp_port(8081);
+            let _ = version_sync::free_tcp_port(8080);
+        }
+    }
+
+    // Always pin a watcher when possible — including watch-only (no JVM launch).
     if !no_core {
-        style::banner_line("Starting javar-core sidecar");
+        style::banner_line("Starting javar-core sidecar (pinned to this run)");
         core_child = spawn_core(path, &addr)?;
     }
 
     if let Some(java_argv) = java_argv {
-        style::banner_line("Launching JVM with JavaR agent");
+        style::banner_line("Launching JVM with JavaR agent (no JAVA_TOOL_OPTIONS)");
         let mut cmd = Command::new("java");
         cmd.arg(&agent_flag)
             .args(&java_argv)
             .env("JAVAR_AGENT_ADDR", &addr)
             .env("JAVAR_PROJECT_NAME", &project_name)
+            .env("JAVAR_LAUNCHED_BY", "javar-run")
             .current_dir(&project.root)
             .stdin(Stdio::inherit())
             .stdout(Stdio::inherit())
             .stderr(Stdio::inherit());
 
+        // Critical: strip global leftovers so IDE/agent flags never double-inject.
+        cmd.env_remove("JAVA_TOOL_OPTIONS");
+        // Native path only for THIS process (not a global user env).
         if let Some(ref n) = native {
             cmd.env("JAVAR_NATIVE_PATH", n);
+        } else {
+            cmd.env_remove("JAVAR_NATIVE_PATH");
         }
+
+        write_run_session(&project.root, &project_name, port)?;
 
         let status = cmd.status().context("spawn java")?;
 
@@ -351,6 +378,7 @@ fn cmd_run(
             let _ = child.kill();
             let _ = child.wait();
         }
+        let _ = clear_run_session();
 
         if !status.success() {
             bail!("java exited with {status}");
@@ -361,7 +389,7 @@ fn cmd_run(
     // Passive watcher: keep sidecar alive until Ctrl+C.
     if let Some(mut child) = core_child {
         style::ok("Passive watcher running — Ctrl+C to stop");
-        style::info_line("Tip: javar enable --global  → every IDE/JVM loads the agent");
+        style::info_line("Launch the app with:  javar run");
         let status = child.wait().context("wait javar-core")?;
         if !status.success() {
             bail!("javar-core exited with {status}");
@@ -373,11 +401,75 @@ fn cmd_run(
     Ok(())
 }
 
+/// Prefer `preferred`, then scan upward so multiple `javar run` apps can coexist.
+fn allocate_agent_port(preferred: u16) -> u16 {
+    let start = if (19222..=19242).contains(&preferred) {
+        preferred
+    } else {
+        19222
+    };
+    for p in start..=19242 {
+        if !tcp_port_busy(p) {
+            if p != preferred {
+                style::info_line(format!("Agent port {preferred} busy — using {p}"));
+            }
+            return p;
+        }
+    }
+    preferred
+}
+
+fn tcp_port_busy(port: u16) -> bool {
+    let addr = std::net::SocketAddr::from(([127, 0, 0, 1], port));
+    TcpStream::connect_timeout(&addr, Duration::from_millis(80)).is_ok()
+}
+
+fn run_session_path() -> PathBuf {
+    embed::javar_home().join("run-session.json")
+}
+
+fn write_run_session(project_root: &Path, name: &str, port: u16) -> Result<()> {
+    let _ = fs::create_dir_all(embed::javar_home());
+    let cwd = project_root
+        .canonicalize()
+        .unwrap_or_else(|_| project_root.to_path_buf());
+    let body = format!(
+        "{{\n  \"name\": \"{}\",\n  \"port\": {},\n  \"cwd\": \"{}\",\n  \"launched_by\": \"javar-run\",\n  \"started_ms\": {}\n}}\n",
+        name.replace('\"', "\\\""),
+        port,
+        cwd.to_string_lossy().replace('\\', "/").replace('\"', "\\\""),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis())
+            .unwrap_or(0)
+    );
+    fs::write(run_session_path(), body)?;
+    Ok(())
+}
+
+fn clear_run_session() -> Result<()> {
+    let p = run_session_path();
+    if p.is_file() {
+        let _ = fs::remove_file(p);
+    }
+    Ok(())
+}
+
 fn spawn_core(path: &Path, addr: &str) -> Result<Option<std::process::Child>> {
     if let Some(bin) = resolve_core_bin(path) {
+        style::info_line(format!(
+            "Watcher → {} (project={}, PINNED agent={})",
+            bin.display(),
+            path.display(),
+            addr
+        ));
+        style::info_line(
+            "On .java save: [WATCHER] → javac --release → bytecode ONLY to this javar run process",
+        );
         let child = Command::new(&bin)
             .arg(path)
             .env("JAVAR_AGENT_ADDR", addr)
+            .env("JAVAR_PINNED_ADDR", addr)
             .stdin(Stdio::null())
             .stdout(Stdio::inherit())
             .stderr(Stdio::inherit())
@@ -400,6 +492,7 @@ fn spawn_core(path: &Path, addr: &str) -> Result<Option<std::process::Child>> {
             ])
             .current_dir(&root)
             .env("JAVAR_AGENT_ADDR", addr)
+            .env("JAVAR_PINNED_ADDR", addr)
             .stdin(Stdio::null())
             .stdout(Stdio::inherit())
             .stderr(Stdio::inherit())

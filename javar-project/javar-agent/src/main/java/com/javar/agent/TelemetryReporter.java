@@ -8,7 +8,6 @@ import java.lang.management.ManagementFactory;
 import java.lang.management.MemoryMXBean;
 import java.lang.management.MemoryUsage;
 import java.nio.charset.StandardCharsets;
-import java.time.Instant;
 import java.util.ArrayDeque;
 import java.util.Deque;
 
@@ -18,6 +17,7 @@ import java.util.Deque;
  */
 public final class TelemetryReporter {
 
+    /** Ring buffer size — Dashboard receives these immediately on late connect. */
     private static final int HISTORY_CAP = 64;
 
     private final Instrumentation instrumentation;
@@ -27,6 +27,9 @@ public final class TelemetryReporter {
 
     /** Manual override when native bridge is unavailable. */
     private volatile long javarManagedBytesOverride = -1L;
+
+    /** Sticky Control Center alert (e.g. IDE Java 23 vs runtime Java 21). */
+    private volatile String syncAlert = "";
 
     public TelemetryReporter(
             Instrumentation instrumentation,
@@ -46,9 +49,25 @@ public final class TelemetryReporter {
         this.javarManagedBytesOverride = Math.max(0, bytes);
     }
 
+    public void setSyncAlert(String message) {
+        this.syncAlert = message == null ? "" : message;
+    }
+
+    public void clearSyncAlert() {
+        this.syncAlert = "";
+    }
+
+    public String getSyncAlert() {
+        return syncAlert;
+    }
+
     public synchronized void recordReload(String className, String changeType, int version) {
+        recordReload(className, changeType, version, System.currentTimeMillis());
+    }
+
+    public synchronized void recordReload(String className, String changeType, int version, long tsMs) {
         history.addFirst(new ReloadEvent(
-                Instant.now().toString(),
+                tsMs,
                 className == null ? "?" : className,
                 changeType == null ? "Body" : changeType,
                 version));
@@ -64,16 +83,33 @@ public final class TelemetryReporter {
         String backend = offHeap != null ? offHeap.backend() : "none";
         String project = resolveProjectName();
         String histJson = historyJson();
+        long pid = AgentRegistry.currentPid();
+        String cmd = System.getProperty("sun.java.command", "");
+        if (cmd.length() > 240) {
+            cmd = cmd.substring(0, 237) + "...";
+        }
+        // MemoryMXBean#getMax can be -1 ("undefined") — never emit negatives (breaks Rust u64 JSON).
+        long heapUsed = Math.max(0L, heap.getUsed());
+        long heapMax = heap.getMax();
+        if (heapMax < 0L) {
+            heapMax = Math.max(heap.getCommitted(), heapUsed);
+        }
+        if (heapMax < heapUsed) {
+            heapMax = heapUsed;
+        }
         String json = "{"
-                + "\"java_heap_used\":" + heap.getUsed() + ","
-                + "\"java_heap_max\":" + heap.getMax() + ","
-                + "\"javar_managed\":" + managed + ","
-                + "\"gc_savings\":" + JavaRManagedRuntime.gcSavingsBytes() + ","
-                + "\"managed_regions\":" + JavaRManagedRuntime.regionCount() + ","
-                + "\"reload_count\":" + reloadCount + ","
-                + "\"loaded_classes\":" + loaded + ","
+                + "\"java_heap_used\":" + heapUsed + ","
+                + "\"java_heap_max\":" + heapMax + ","
+                + "\"javar_managed\":" + Math.max(0L, managed) + ","
+                + "\"gc_savings\":" + Math.max(0L, JavaRManagedRuntime.gcSavingsBytes()) + ","
+                + "\"managed_regions\":" + Math.max(0L, JavaRManagedRuntime.regionCount()) + ","
+                + "\"reload_count\":" + Math.max(0L, reloadCount) + ","
+                + "\"loaded_classes\":" + Math.max(0L, loaded) + ","
                 + "\"offheap_backend\":\"" + escapeJson(backend) + "\","
                 + "\"project_name\":\"" + escapeJson(project) + "\","
+                + "\"pid\":" + pid + ","
+                + "\"jvm_cmd\":\"" + escapeJson(cmd) + "\","
+                + "\"sync_alert\":\"" + escapeJson(syncAlert) + "\","
                 + "\"reload_history\":" + histJson
                 + "}";
         return json.getBytes(StandardCharsets.UTF_8);
@@ -89,7 +125,7 @@ public final class TelemetryReporter {
             }
             first = false;
             sb.append('{')
-                    .append("\"ts\":\"").append(escapeJson(e.ts)).append("\",")
+                    .append("\"ts\":").append(e.tsMs).append(',')
                     .append("\"class_name\":\"").append(escapeJson(e.className)).append("\",")
                     .append("\"change_type\":\"").append(escapeJson(e.changeType)).append("\",")
                     .append("\"version\":").append(e.version)
@@ -144,13 +180,13 @@ public final class TelemetryReporter {
     }
 
     static final class ReloadEvent {
-        final String ts;
+        final long tsMs;
         final String className;
         final String changeType;
         final int version;
 
-        ReloadEvent(String ts, String className, String changeType, int version) {
-            this.ts = ts;
+        ReloadEvent(long tsMs, String className, String changeType, int version) {
+            this.tsMs = tsMs;
             this.className = className;
             this.changeType = changeType;
             this.version = version;

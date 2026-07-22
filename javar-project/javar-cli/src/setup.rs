@@ -14,6 +14,10 @@ pub fn cmd_setup() -> Result<()> {
     style::header("JavaR setup");
     style::banner_line(format!("OS: {} / {}", env::consts::OS, env::consts::ARCH));
 
+    // Never install global JAVA_TOOL_OPTIONS — strip leftovers from older versions.
+    style::banner_line("Ensuring no global agent injection…");
+    let _ = crate::global_mode::ensure_no_global_injection();
+
     // If ~/.javar/bin/javar-agent.jar is missing, write AGENT_BYTES immediately.
     match embed::ensure_agent_jar(None) {
         Ok(agent) => style::ok(format!("Agent → {}", agent.display())),
@@ -40,13 +44,14 @@ pub fn cmd_setup() -> Result<()> {
     prepend_user_path(&embed::javar_bin_dir())?;
 
     style::info_line("Optional: javar tools install  — bootstrap Maven under ~/.javar/tools");
-    style::info_line("Invisible mode: javar enable --global  — JAVA_TOOL_OPTIONS for every JVM");
+    style::info_line("Primary entry point:  javar run   (explicit agent — no global env)");
+    style::info_line("Monitor:              javar dashboard");
 
     check_tool("java", &["-version"]);
     check_tool_maven();
 
     style::ok(format!("JavaR home: {}", embed::javar_home().display()));
-    style::ok("Setup complete — open a new terminal, then try: javar run");
+    style::ok("Setup complete — open a new terminal, then: javar run");
     Ok(())
 }
 

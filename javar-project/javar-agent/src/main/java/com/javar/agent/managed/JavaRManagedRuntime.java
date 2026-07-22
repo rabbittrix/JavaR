@@ -38,6 +38,24 @@ public final class JavaRManagedRuntime {
     private JavaRManagedRuntime() {
     }
 
+    /**
+     * Warm the off-heap bridge + cleaner BEFORE any {@code @JavaRManaged} class loads.
+     * Prevents "unknown fallback region" races on the first field access.
+     */
+    public static synchronized void bootstrap(OffHeapBridge offHeap) {
+        if (offHeap != null) {
+            bridge = offHeap;
+        } else {
+            bridge();
+        }
+        startCleaner();
+        // Touch fallback allocator so first ensureRegion never hits a cold map.
+        long warm = FallbackArena.allocate(8);
+        FallbackArena.free(warm);
+        LOG.info("JavaRManagedRuntime bootstrapped (backend="
+                + (bridge != null ? bridge.backend() : "none") + ")");
+    }
+
     public static void registerLayout(FieldLayout layout) {
         LAYOUTS.put(layout.className(), layout);
         LOG.fine("Registered off-heap layout for " + layout.className()

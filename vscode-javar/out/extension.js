@@ -37,6 +37,9 @@ exports.activate = activate;
 exports.deactivate = deactivate;
 const vscode = __importStar(require("vscode"));
 const net = __importStar(require("net"));
+const fs = __importStar(require("fs"));
+const os = __importStar(require("os"));
+const path = __importStar(require("path"));
 const child_process_1 = require("child_process");
 const ensureCli_1 = require("./ensureCli");
 let statusBar;
@@ -44,6 +47,8 @@ let coreProc;
 let pollTimer;
 let lastTelemetry = { heap: 0, managed: 0, regions: 0, project: "" };
 let resolvedCli;
+/** Live agent port discovered from ~/.javar/agents (prefer user Spring apps). */
+let resolvedAgentPort = 19222;
 function activate(context) {
     statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
     statusBar.command = "javar.forceResync";
@@ -93,7 +98,9 @@ async function connectAndPoll(regions) {
 async function refreshTelemetry(regions) {
     const cfg = vscode.workspace.getConfiguration("javar");
     const host = cfg.get("agentHost", "127.0.0.1");
-    const port = cfg.get("agentPort", 19222);
+    const folder = vscode.workspace.workspaceFolders?.[0]?.name ?? "";
+    resolvedAgentPort = resolveBestAgentPort(cfg.get("agentPort", 19222), folder);
+    const port = resolvedAgentPort;
     try {
         const snap = await requestTelemetry(host, port);
         lastTelemetry = {
@@ -105,7 +112,8 @@ async function refreshTelemetry(regions) {
         const heapMb = (lastTelemetry.heap / (1024 * 1024)).toFixed(1);
         const manMb = (lastTelemetry.managed / (1024 * 1024)).toFixed(1);
         const proj = lastTelemetry.project ? ` · ${lastTelemetry.project}` : "";
-        statusBar.text = `$(flame) JavaR: Active${proj} · Heap ${heapMb}MB · Off-heap ${manMb}MB`;
+        const hist = Array.isArray(snap.reload_history) ? snap.reload_history.length : 0;
+        statusBar.text = `$(flame) JavaR: Active${proj} · :${port} · Heap ${heapMb}MB · hist ${hist}`;
         regions.update(lastTelemetry.regions, lastTelemetry.managed, lastTelemetry.project);
     }
     catch {
@@ -119,12 +127,20 @@ async function forceResync() {
     }
     const cfg = vscode.workspace.getConfiguration("javar");
     const host = cfg.get("agentHost", "127.0.0.1");
-    const port = cfg.get("agentPort", 19222);
+    const folder = vscode.workspace.workspaceFolders?.[0]?.name ?? "";
+    resolvedAgentPort = resolveBestAgentPort(cfg.get("agentPort", 19222), folder);
+    const port = resolvedAgentPort;
     const path = editor?.document.uri.fsPath ?? "";
     try {
         await sendHotDeploy(host, port, path);
-        vscode.window.setStatusBarMessage("JavaR: Force Re-sync sent", 2500);
-        statusBar.text = "$(sync) JavaR: Re-sync…";
+        // Restart sidecar so it reconnects to the correct app port after save.
+        if (coreProc && !coreProc.killed) {
+            coreProc.kill();
+            coreProc = undefined;
+        }
+        await startSidecar(true);
+        vscode.window.setStatusBarMessage(`JavaR: Force Re-sync → :${port} (sidecar retargeted)`, 3000);
+        statusBar.text = `$(sync) JavaR: Re-sync :${port}`;
     }
     catch (e) {
         vscode.window.showErrorMessage(`JavaR Force Re-sync failed: ${String(e)}`);
@@ -152,23 +168,38 @@ async function startSidecar(quiet = false) {
     }
     const cfg = vscode.workspace.getConfiguration("javar");
     const folder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? ".";
-    const port = cfg.get("agentPort", 19222);
     const projectName = vscode.workspace.workspaceFolders?.[0]?.name ?? "java-app";
-    coreProc = (0, child_process_1.spawn)(cli, ["run", folder, "--watch-only", "--port", String(port)], {
-        cwd: folder,
-        shell: true,
-        env: {
-            ...process.env,
-            JAVAR_AGENT_ADDR: `127.0.0.1:${port}`,
-            JAVAR_PROJECT_NAME: projectName,
-        },
-    });
+    resolvedAgentPort = resolveBestAgentPort(cfg.get("agentPort", 19222), projectName);
+    const port = resolvedAgentPort;
+    const coreBin = resolveCoreBinary(cli);
+    if (coreBin) {
+        coreProc = (0, child_process_1.spawn)(coreBin, [folder], {
+            cwd: folder,
+            shell: false,
+            env: {
+                ...process.env,
+                JAVAR_AGENT_ADDR: `127.0.0.1:${port}`,
+                JAVAR_PROJECT_NAME: projectName,
+            },
+        });
+    }
+    else {
+        coreProc = (0, child_process_1.spawn)(cli, ["run", folder, "--watch-only", "--port", String(port)], {
+            cwd: folder,
+            shell: true,
+            env: {
+                ...process.env,
+                JAVAR_AGENT_ADDR: `127.0.0.1:${port}`,
+                JAVAR_PROJECT_NAME: projectName,
+            },
+        });
+    }
     coreProc.on("exit", () => {
         coreProc = undefined;
         statusBar.text = "$(flame) JavaR: Idle";
     });
     if (!quiet) {
-        vscode.window.showInformationMessage("JavaR sidecar started (watch-only). Run your app via IDE / mvn — use `javar enable --global` for invisible agent injection.");
+        vscode.window.showInformationMessage(`JavaR sidecar watching → agent :${port}. Edit .java / .class to hot-reload.`);
     }
 }
 async function openDashboard() {
@@ -177,11 +208,86 @@ async function openDashboard() {
         return;
     }
     const cfg = vscode.workspace.getConfiguration("javar");
-    const port = cfg.get("agentPort", 19222);
+    const folder = vscode.workspace.workspaceFolders?.[0]?.name ?? "";
+    resolvedAgentPort = resolveBestAgentPort(cfg.get("agentPort", 19222), folder);
+    const port = resolvedAgentPort;
     const term = vscode.window.createTerminal({ name: "JavaR Control Center" });
     term.show();
     const quoted = cli.includes(" ") ? `"${cli}"` : cli;
     term.sendText(`${quoted} dashboard --addr 127.0.0.1:${port}`);
+}
+/** Pick DemoApplication / Spring app over Metals / language servers / Maven Launcher. */
+function resolveBestAgentPort(fallback, workspaceName) {
+    const home = process.env.JAVAR_HOME || path.join(os.homedir(), ".javar");
+    const dir = path.join(home, "agents");
+    if (!fs.existsSync(dir)) {
+        return fallback;
+    }
+    const folder = (workspaceName || "").toLowerCase();
+    const cands = [];
+    for (const f of fs.readdirSync(dir)) {
+        if (!f.endsWith(".json"))
+            continue;
+        try {
+            const j = JSON.parse(fs.readFileSync(path.join(dir, f), "utf8"));
+            const port = Number(j.port || 0);
+            if (port < 19222 || port > 19232)
+                continue;
+            const name = String(j.name || j.project_name || "").toLowerCase();
+            const cmd = String(j.cmd || "").toLowerCase();
+            if (isTooling(name, cmd))
+                continue;
+            let score = 40;
+            if (name.endsWith("application") || cmd.includes("application"))
+                score += 200;
+            if (name.includes("spring") || cmd.includes("springframework"))
+                score += 120;
+            if (name.includes("demo") || cmd.includes("demo"))
+                score += 80;
+            if (folder && (name.includes(folder) || cmd.includes(folder)))
+                score += 150;
+            if (name === "launcher" || cmd.includes("plexus") || cmd.includes("spring-boot:run")) {
+                score -= 250;
+            }
+            cands.push({ port, score });
+        }
+        catch {
+            /* ignore bad json */
+        }
+    }
+    cands.sort((a, b) => b.score - a.score || a.port - b.port);
+    return cands[0]?.port ?? fallback;
+}
+function isTooling(name, cmd) {
+    const markers = [
+        "eclipse",
+        "equinox",
+        "redhat.java",
+        "jdt",
+        "lemminx",
+        "xmlserver",
+        "languageserver",
+        "language-server",
+        "metals",
+        "plexus",
+        "classworlds.launcher",
+        "spring-boot-language-server",
+    ];
+    if (markers.some((m) => name.includes(m) || cmd.includes(m)))
+        return true;
+    return name === "launcher";
+}
+function resolveCoreBinary(cliPath) {
+    const exe = process.platform === "win32" ? "javar-core.exe" : "javar-core";
+    const candidates = [
+        path.join(os.homedir(), ".javar", "bin", exe),
+        path.join(path.dirname(cliPath), exe),
+    ];
+    for (const c of candidates) {
+        if (fs.existsSync(c))
+            return c;
+    }
+    return undefined;
 }
 function requestTelemetry(host, port) {
     return new Promise((resolve, reject) => {

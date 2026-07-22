@@ -185,3 +185,217 @@ INFO: Unsupported notification method: $/setTrace
 2026.07.19 22:36:20 INFO  Memory monitor stopped
 2026.07.19 22:36:20 INFO  shutting down Metals
 2026.07.19 22:36:20 INFO  Exiting server
+2026.07.21 19:48:54 INFO  Started: Metals version 1.6.7 in folders 'G:\Project_JavaR' for client Cursor 1.128.0.
+2026.07.21 19:48:54 INFO  Memory monitor started
+2026.07.21 19:48:54 WARN  Using H2 2.4.240 which is newer than the version Flyway has been verified with. The latest verified version of H2 is 2.3.232.
+2026.07.21 19:48:56 WARN  no build tool detected in workspace 'G:\Project_JavaR'. The most common cause for this problem is that the editor was opened in the wrong working directory, for example if you use sbt then the workspace directory should contain build.sbt. 
+2026.07.21 19:48:56 WARN  Build server is not auto-connectable.
+2026.07.21 19:48:56 WARN  no build target for: G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\TelemetryReporter.java
+2026.07.21 19:48:56 WARN  no build target for: G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\managed\JavaRManagedRuntime.java
+2026.07.21 19:48:57 WARN  no build target for: G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\AgentSocketServer.java
+2026.07.21 19:49:03 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\TelemetryReporter.java. Using fallback presentation compiler.
+2026.07.21 19:51:40 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\managed\JavaRManagedRuntime.java. Using fallback presentation compiler.
+2026.07.21 19:51:53 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\TelemetryReporter.java. Using fallback presentation compiler.
+2026.07.21 19:51:57 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\AgentSocketServer.java. Using fallback presentation compiler.
+Jul 21, 2026 7:56:10 PM org.eclipse.lsp4j.jsonrpc.services.GenericEndpoint notify
+INFO: Unsupported notification method: $/setTrace
+2026.07.21 20:48:22 INFO  Started: Metals version 1.6.7 in folders 'G:\Project_JavaR' for client Cursor 1.128.0.
+2026.07.21 20:48:22 INFO  Memory monitor started
+2026.07.21 20:48:27 WARN  Using H2 2.4.240 which is newer than the version Flyway has been verified with. The latest verified version of H2 is 2.3.232.
+2026.07.21 20:48:28 WARN  no build tool detected in workspace 'G:\Project_JavaR'. The most common cause for this problem is that the editor was opened in the wrong working directory, for example if you use sbt then the workspace directory should contain build.sbt. 
+2026.07.21 20:48:29 WARN  Build server is not auto-connectable.
+2026.07.21 20:50:24 WARN  no build target for: G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\JavaRAgent.java
+2026.07.21 20:53:24 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\JavaRAgent.java. Using fallback presentation compiler.
+2026.07.21 21:21:22 INFO  Started: Metals version 1.6.7 in folders 'G:\Project_JavaR' for client Cursor 1.128.0.
+2026.07.21 21:21:22 INFO  Memory monitor started
+2026.07.21 21:21:26 WARN  Using H2 2.4.240 which is newer than the version Flyway has been verified with. The latest verified version of H2 is 2.3.232.
+2026.07.21 21:21:27 WARN  no build tool detected in workspace 'G:\Project_JavaR'. The most common cause for this problem is that the editor was opened in the wrong working directory, for example if you use sbt then the workspace directory should contain build.sbt. 
+2026.07.21 21:21:28 WARN  Build server is not auto-connectable.
+2026.07.21 21:21:42 INFO  Started: Metals version 1.6.7 in folders 'G:\Project_JavaR' for client Cursor 1.128.0.
+2026.07.21 21:21:42 INFO  Memory monitor started
+2026.07.21 21:21:47 WARN  Using H2 2.4.240 which is newer than the version Flyway has been verified with. The latest verified version of H2 is 2.3.232.
+2026.07.21 21:21:49 WARN  no build tool detected in workspace 'G:\Project_JavaR'. The most common cause for this problem is that the editor was opened in the wrong working directory, for example if you use sbt then the workspace directory should contain build.sbt. 
+2026.07.21 21:21:49 WARN  Build server is not auto-connectable.
+2026.07.21 21:30:02 INFO  Started: Metals version 1.6.7 in folders 'G:\Project_JavaR' for client Cursor 1.128.0.
+2026.07.21 21:30:02 INFO  Memory monitor started
+2026.07.21 21:30:10 INFO  Started: Metals version 1.6.7 in folders 'G:\Project_JavaR' for client Cursor 1.128.0.
+2026.07.21 21:30:10 INFO  Memory monitor started
+2026.07.21 21:30:11 WARN  Using H2 2.4.240 which is newer than the version Flyway has been verified with. The latest verified version of H2 is 2.3.232.
+2026.07.21 21:30:11 WARN  no build tool detected in workspace 'G:\Project_JavaR'. The most common cause for this problem is that the editor was opened in the wrong working directory, for example if you use sbt then the workspace directory should contain build.sbt. 
+2026.07.21 21:30:12 WARN  Build server is not auto-connectable.
+2026.07.21 21:34:22 WARN  no build target for: G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\AgentRegistry.java
+2026.07.21 21:34:23 WARN  no build target for: G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\AgentSocketServer.java
+2026.07.21 21:34:25 WARN  no build target for: G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\JavaRAgent.java
+2026.07.21 21:34:26 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\JavaRAgent.java. Using fallback presentation compiler.
+2026.07.21 21:34:29 WARN  no build target for: G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\TelemetryReporter.java
+2026.07.21 21:34:29 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\TelemetryReporter.java. Using fallback presentation compiler.
+2026.07.21 21:34:32 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\AgentRegistry.java. Using fallback presentation compiler.
+2026.07.21 21:35:07 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\JavaRAgent.java. Using fallback presentation compiler.
+2026.07.21 21:37:22 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\AgentRegistry.java. Using fallback presentation compiler.
+2026.07.21 21:37:22 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\AgentSocketServer.java. Using fallback presentation compiler.
+2026.07.21 21:37:25 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\JavaRAgent.java. Using fallback presentation compiler.
+2026.07.21 21:37:29 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\TelemetryReporter.java. Using fallback presentation compiler.
+2026.07.21 21:40:21 INFO  Started: Metals version 1.6.7 in folders 'G:\Project_JavaR' for client Cursor 1.128.0.
+2026.07.21 21:40:21 INFO  Memory monitor started
+2026.07.21 21:40:25 INFO  Started: Metals version 1.6.7 in folders 'G:\Project_JavaR' for client Cursor 1.128.0.
+2026.07.21 21:40:25 INFO  Memory monitor started
+2026.07.21 21:40:28 WARN  Using H2 2.4.240 which is newer than the version Flyway has been verified with. The latest verified version of H2 is 2.3.232.
+2026.07.21 21:40:28 WARN  no build tool detected in workspace 'G:\Project_JavaR'. The most common cause for this problem is that the editor was opened in the wrong working directory, for example if you use sbt then the workspace directory should contain build.sbt. 
+2026.07.21 21:40:29 WARN  Build server is not auto-connectable.
+2026.07.21 21:41:03 INFO  Started: Metals version 1.6.7 in folders 'G:\Project_JavaR' for client Cursor 1.128.0.
+2026.07.21 21:41:03 INFO  Memory monitor started
+2026.07.21 21:41:07 WARN  Using H2 2.4.240 which is newer than the version Flyway has been verified with. The latest verified version of H2 is 2.3.232.
+2026.07.21 21:41:07 WARN  no build tool detected in workspace 'G:\Project_JavaR'. The most common cause for this problem is that the editor was opened in the wrong working directory, for example if you use sbt then the workspace directory should contain build.sbt. 
+2026.07.21 21:41:09 WARN  Build server is not auto-connectable.
+2026.07.21 21:50:21 WARN  no build target for: G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\AgentRegistry.java
+2026.07.21 21:50:23 WARN  no build target for: G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\AgentSocketServer.java
+2026.07.21 21:50:23 WARN  no build target for: G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\JavaRAgent.java
+2026.07.21 21:50:45 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\AgentSocketServer.java. Using fallback presentation compiler.
+2026.07.21 21:53:21 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\AgentRegistry.java. Using fallback presentation compiler.
+2026.07.21 21:53:23 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\AgentSocketServer.java. Using fallback presentation compiler.
+2026.07.21 21:53:23 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\JavaRAgent.java. Using fallback presentation compiler.
+2026.07.21 22:03:30 INFO  Started: Metals version 1.6.7 in folders 'G:\Project_JavaR' for client Cursor 1.128.0.
+2026.07.21 22:03:30 INFO  Memory monitor started
+2026.07.21 22:03:35 WARN  Using H2 2.4.240 which is newer than the version Flyway has been verified with. The latest verified version of H2 is 2.3.232.
+2026.07.21 22:03:35 WARN  no build tool detected in workspace 'G:\Project_JavaR'. The most common cause for this problem is that the editor was opened in the wrong working directory, for example if you use sbt then the workspace directory should contain build.sbt. 
+2026.07.21 22:03:36 WARN  Build server is not auto-connectable.
+2026.07.21 22:26:31 WARN  no build target for: G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\JavaRAgent.java
+2026.07.21 22:26:41 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\JavaRAgent.java. Using fallback presentation compiler.
+2026.07.21 22:29:31 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\JavaRAgent.java. Using fallback presentation compiler.
+2026.07.21 22:38:03 WARN  no build target for: G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\TelemetryReporter.java
+2026.07.21 22:38:16 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\TelemetryReporter.java. Using fallback presentation compiler.
+2026.07.21 22:38:58 WARN  no build target for: G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\AgentSocketServer.java
+2026.07.21 22:41:03 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\TelemetryReporter.java. Using fallback presentation compiler.
+2026.07.21 22:41:58 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\AgentSocketServer.java. Using fallback presentation compiler.
+2026.07.21 22:45:19 WARN  no build target for: G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\JavaRAgent.java
+2026.07.21 22:46:22 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\JavaRAgent.java. Using fallback presentation compiler.
+2026.07.21 22:48:19 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\JavaRAgent.java. Using fallback presentation compiler.
+2026.07.21 22:50:55 WARN  no build target for: G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\ClassRedefiner.java
+2026.07.21 22:50:59 WARN  no build target for: G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\AgentSocketServer.java
+2026.07.21 22:53:55 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\ClassRedefiner.java. Using fallback presentation compiler.
+2026.07.21 22:53:59 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\AgentSocketServer.java. Using fallback presentation compiler.
+2026.07.21 23:10:30 WARN  no build target for: G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\AgentSocketServer.java
+2026.07.21 23:10:32 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\AgentSocketServer.java. Using fallback presentation compiler.
+2026.07.21 23:10:34 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\AgentSocketServer.java. Using fallback presentation compiler.
+2026.07.21 23:10:35 WARN  no build target for: G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\TelemetryReporter.java
+2026.07.21 23:10:37 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\TelemetryReporter.java. Using fallback presentation compiler.
+2026.07.21 23:10:37 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\TelemetryReporter.java. Using fallback presentation compiler.
+2026.07.21 23:10:44 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\TelemetryReporter.java. Using fallback presentation compiler.
+2026.07.21 23:13:30 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\AgentSocketServer.java. Using fallback presentation compiler.
+2026.07.21 23:13:35 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\TelemetryReporter.java. Using fallback presentation compiler.
+2026.07.21 23:24:09 INFO  Started: Metals version 1.6.7 in folders 'G:\Project_JavaR' for client Cursor 1.128.0.
+2026.07.21 23:24:09 INFO  Memory monitor started
+2026.07.21 23:24:15 WARN  Using H2 2.4.240 which is newer than the version Flyway has been verified with. The latest verified version of H2 is 2.3.232.
+2026.07.21 23:24:17 WARN  no build tool detected in workspace 'G:\Project_JavaR'. The most common cause for this problem is that the editor was opened in the wrong working directory, for example if you use sbt then the workspace directory should contain build.sbt. 
+2026.07.21 23:24:17 WARN  Build server is not auto-connectable.
+2026.07.21 23:35:16 INFO  Started: Metals version 1.6.7 in folders 'G:\Project_JavaR' for client Cursor 1.128.0.
+2026.07.21 23:35:16 INFO  Memory monitor started
+2026.07.21 23:35:21 WARN  Using H2 2.4.240 which is newer than the version Flyway has been verified with. The latest verified version of H2 is 2.3.232.
+2026.07.21 23:35:21 WARN  no build tool detected in workspace 'G:\Project_JavaR'. The most common cause for this problem is that the editor was opened in the wrong working directory, for example if you use sbt then the workspace directory should contain build.sbt. 
+2026.07.21 23:35:22 WARN  Build server is not auto-connectable.
+2026.07.21 23:52:47 WARN  no build target for: G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\managed\ManagedClassTransformer.java
+2026.07.21 23:53:01 WARN  no build target for: G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\ClassRedefiner.java
+2026.07.21 23:54:39 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\ClassRedefiner.java. Using fallback presentation compiler.
+2026.07.21 23:54:46 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\ClassRedefiner.java. Using fallback presentation compiler.
+2026.07.21 23:54:49 WARN  no build target for: G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\AgentSocketServer.java
+2026.07.21 23:54:56 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\ClassRedefiner.java. Using fallback presentation compiler.
+2026.07.21 23:54:59 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\ClassRedefiner.java. Using fallback presentation compiler.
+2026.07.21 23:55:47 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\managed\ManagedClassTransformer.java. Using fallback presentation compiler.
+2026.07.21 23:56:01 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\ClassRedefiner.java. Using fallback presentation compiler.
+2026.07.21 23:57:49 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\AgentSocketServer.java. Using fallback presentation compiler.
+2026.07.22 00:01:05 INFO  Started: Metals version 1.6.7 in folders 'G:\Project_JavaR' for client Cursor 1.128.0.
+2026.07.22 00:01:05 INFO  Memory monitor started
+2026.07.22 00:01:11 WARN  Using H2 2.4.240 which is newer than the version Flyway has been verified with. The latest verified version of H2 is 2.3.232.
+2026.07.22 00:01:13 WARN  no build tool detected in workspace 'G:\Project_JavaR'. The most common cause for this problem is that the editor was opened in the wrong working directory, for example if you use sbt then the workspace directory should contain build.sbt. 
+2026.07.22 00:01:13 WARN  Build server is not auto-connectable.
+2026.07.22 00:05:06 INFO  Started: Metals version 1.6.7 in folders 'G:\Project_JavaR' for client Cursor 1.128.0.
+2026.07.22 00:05:06 INFO  Memory monitor started
+2026.07.22 00:05:12 WARN  Using H2 2.4.240 which is newer than the version Flyway has been verified with. The latest verified version of H2 is 2.3.232.
+2026.07.22 00:05:13 WARN  no build tool detected in workspace 'G:\Project_JavaR'. The most common cause for this problem is that the editor was opened in the wrong working directory, for example if you use sbt then the workspace directory should contain build.sbt. 
+2026.07.22 00:05:13 WARN  Build server is not auto-connectable.
+2026.07.22 00:31:32 WARN  no build target for: G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\TelemetryReporter.java
+2026.07.22 00:31:33 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\TelemetryReporter.java. Using fallback presentation compiler.
+2026.07.22 00:31:33 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\TelemetryReporter.java. Using fallback presentation compiler.
+2026.07.22 00:31:38 WARN  no build target for: G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\ClassRedefiner.java
+2026.07.22 00:31:41 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\ClassRedefiner.java. Using fallback presentation compiler.
+2026.07.22 00:31:45 WARN  no build target for: G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\AgentSocketServer.java
+2026.07.22 00:31:51 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\ClassRedefiner.java. Using fallback presentation compiler.
+2026.07.22 00:31:52 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\ClassRedefiner.java. Using fallback presentation compiler.
+2026.07.22 00:32:06 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\ClassRedefiner.java. Using fallback presentation compiler.
+2026.07.22 00:33:39 INFO  Started: Metals version 1.6.7 in folders 'G:\Project_JavaR' for client Cursor 1.128.0.
+2026.07.22 00:33:39 INFO  Memory monitor started
+2026.07.22 00:33:44 WARN  Using H2 2.4.240 which is newer than the version Flyway has been verified with. The latest verified version of H2 is 2.3.232.
+2026.07.22 00:33:46 WARN  no build tool detected in workspace 'G:\Project_JavaR'. The most common cause for this problem is that the editor was opened in the wrong working directory, for example if you use sbt then the workspace directory should contain build.sbt. 
+2026.07.22 00:33:46 WARN  Build server is not auto-connectable.
+2026.07.22 00:33:46 WARN  no build target for: G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\ClassRedefiner.java
+2026.07.22 00:33:46 WARN  no build target for: G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\AgentSocketServer.java
+2026.07.22 00:33:46 WARN  no build target for: G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\TelemetryReporter.java
+2026.07.22 00:33:47 WARN  Running javac-semanticdb failed for file:///G:/Project_JavaR/javar-project/javar-agent/src/main/java/com/javar/agent/ClassRedefiner.java. Output:
+
+2026.07.22 00:34:32 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\TelemetryReporter.java. Using fallback presentation compiler.
+2026.07.22 00:34:38 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\ClassRedefiner.java. Using fallback presentation compiler.
+2026.07.22 00:34:45 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\AgentSocketServer.java. Using fallback presentation compiler.
+2026.07.22 00:44:53 WARN  no build target for: G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\ClassRedefiner.java
+2026.07.22 00:44:53 WARN  Running javac-semanticdb failed for file:///G:/Project_JavaR/javar-project/javar-agent/src/main/java/com/javar/agent/ClassRedefiner.java. Output:
+
+2026.07.22 00:44:53 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\ClassRedefiner.java. Using fallback presentation compiler.
+2026.07.22 00:44:56 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\ClassRedefiner.java. Using fallback presentation compiler.
+2026.07.22 00:44:56 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\ClassRedefiner.java. Using fallback presentation compiler.
+2026.07.22 00:44:56 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\ClassRedefiner.java. Using fallback presentation compiler.
+2026.07.22 00:44:58 WARN  no build target for: G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\AgentRegistry.java
+2026.07.22 00:44:58 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\AgentRegistry.java. Using fallback presentation compiler.
+2026.07.22 00:44:58 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\AgentRegistry.java. Using fallback presentation compiler.
+2026.07.22 00:45:00 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\ClassRedefiner.java. Using fallback presentation compiler.
+2026.07.22 00:45:04 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\ClassRedefiner.java. Using fallback presentation compiler.
+2026.07.22 00:45:04 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\ClassRedefiner.java. Using fallback presentation compiler.
+2026.07.22 00:45:04 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\ClassRedefiner.java. Using fallback presentation compiler.
+2026.07.22 00:45:04 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\ClassRedefiner.java. Using fallback presentation compiler.
+2026.07.22 00:45:05 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\ClassRedefiner.java. Using fallback presentation compiler.
+2026.07.22 00:45:05 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\ClassRedefiner.java. Using fallback presentation compiler.
+2026.07.22 00:45:05 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\ClassRedefiner.java. Using fallback presentation compiler.
+2026.07.22 00:45:05 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\ClassRedefiner.java. Using fallback presentation compiler.
+2026.07.22 00:45:07 WARN  no build target for: G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\ClassRedefiner.java
+2026.07.22 00:45:07 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\ClassRedefiner.java. Using fallback presentation compiler.
+2026.07.22 00:45:08 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\ClassRedefiner.java. Using fallback presentation compiler.
+2026.07.22 00:45:12 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\ClassRedefiner.java. Using fallback presentation compiler.
+2026.07.22 00:45:12 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\ClassRedefiner.java. Using fallback presentation compiler.
+2026.07.22 00:45:13 WARN  no build target for: G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\ClassRedefiner.java
+2026.07.22 00:45:13 WARN  Running javac-semanticdb failed for file:///G:/Project_JavaR/javar-project/javar-agent/src/main/java/com/javar/agent/ClassRedefiner.java. Output:
+
+2026.07.22 00:45:13 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\ClassRedefiner.java. Using fallback presentation compiler.
+2026.07.22 00:45:16 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\ClassRedefiner.java. Using fallback presentation compiler.
+2026.07.22 00:45:16 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\ClassRedefiner.java. Using fallback presentation compiler.
+2026.07.22 00:45:17 WARN  no build target for: G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\managed\JavaRManagedRuntime.java
+2026.07.22 00:45:17 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\ClassRedefiner.java. Using fallback presentation compiler.
+2026.07.22 00:45:17 WARN  no build target for: G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\ClassRedefiner.java
+2026.07.22 00:45:17 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\ClassRedefiner.java. Using fallback presentation compiler.
+2026.07.22 00:45:18 WARN  no build target for: G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\JavaRAgent.java
+2026.07.22 00:45:18 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\ClassRedefiner.java. Using fallback presentation compiler.
+2026.07.22 00:45:22 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\ClassRedefiner.java. Using fallback presentation compiler.
+2026.07.22 00:45:22 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\ClassRedefiner.java. Using fallback presentation compiler.
+2026.07.22 00:45:23 WARN  no build target for: G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\ClassRedefiner.java
+2026.07.22 00:45:23 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\ClassRedefiner.java. Using fallback presentation compiler.
+2026.07.22 00:45:24 WARN  no build target for: G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\AgentSocketServer.java
+2026.07.22 00:45:24 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\ClassRedefiner.java. Using fallback presentation compiler.
+2026.07.22 00:45:26 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\AgentSocketServer.java. Using fallback presentation compiler.
+2026.07.22 00:45:46 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\AgentSocketServer.java. Using fallback presentation compiler.
+2026.07.22 00:45:48 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\AgentSocketServer.java. Using fallback presentation compiler.
+2026.07.22 00:45:57 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\AgentSocketServer.java. Using fallback presentation compiler.
+2026.07.22 00:47:58 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\AgentRegistry.java. Using fallback presentation compiler.
+2026.07.22 00:48:17 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\managed\JavaRManagedRuntime.java. Using fallback presentation compiler.
+2026.07.22 00:48:18 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\JavaRAgent.java. Using fallback presentation compiler.
+2026.07.22 00:48:24 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\AgentSocketServer.java. Using fallback presentation compiler.
+2026.07.22 00:50:06 WARN  no build target for: G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\ClassRedefiner.java
+2026.07.22 00:50:06 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\ClassRedefiner.java. Using fallback presentation compiler.
+2026.07.22 00:50:06 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\ClassRedefiner.java. Using fallback presentation compiler.
+2026.07.22 00:51:54 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\ClassRedefiner.java. Using fallback presentation compiler.
+2026.07.22 00:52:38 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\ClassRedefiner.java. Using fallback presentation compiler.
+2026.07.22 01:01:38 INFO  Started: Metals version 1.6.7 in folders 'G:\Project_JavaR' for client Cursor 1.128.0.
+2026.07.22 01:01:38 INFO  Memory monitor started
+2026.07.22 01:01:42 WARN  Using H2 2.4.240 which is newer than the version Flyway has been verified with. The latest verified version of H2 is 2.3.232.
+2026.07.22 01:01:43 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\ClassRedefiner.java. Using fallback presentation compiler.
+2026.07.22 01:01:45 WARN  no build tool detected in workspace 'G:\Project_JavaR'. The most common cause for this problem is that the editor was opened in the wrong working directory, for example if you use sbt then the workspace directory should contain build.sbt. 
+2026.07.22 01:01:45 WARN  Build server is not auto-connectable.
+2026.07.22 01:01:45 WARN  no build target for: G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\ClassRedefiner.java
+2026.07.22 01:01:45 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\ClassRedefiner.java. Using fallback presentation compiler.
+2026.07.22 01:01:47 INFO  time: code lens generation in 1.49s

@@ -8,6 +8,7 @@
 //! - [`memory`] Phase-2 scaffold for off-heap managed regions
 //! - [`rollback`] tracks class versions for instant revert
 
+pub mod agent_resolve;
 pub mod bridge;
 pub mod classfile;
 pub mod compiler;
@@ -17,9 +18,10 @@ pub mod rollback;
 pub mod shadow;
 pub mod watcher;
 
+pub use agent_resolve::resolve_agent_addr;
 pub use bridge::{AgentBridge, BridgeConfig};
 pub use classfile::{ChangeKind as SchemaChangeKind, ClassSchema};
-pub use compiler::{CompileRequest, Compiler};
+pub use compiler::{resolve_compiler_release, CompileRequest, Compiler};
 pub use protocol::{Frame, Message, MessageKind};
 pub use rollback::RollbackStore;
 pub use shadow::{ShadowRegistry, ShadowVersion};
@@ -99,6 +101,8 @@ impl JavaRCore {
         let compiler = self.compiler;
         let rollback = self.rollback.clone();
         let shadows = self.shadows.clone();
+        let project_root = self.config.project_root.clone();
+        let preferred = self.config.agent_addr.clone();
 
         // Announce readiness to agent / IDE clients.
         bridge
@@ -106,7 +110,16 @@ impl JavaRCore {
             .await?;
 
         while let Some(event) = watcher.next().await {
-            if let Err(err) = handle_event(&event, &compiler, &bridge, &rollback, &shadows).await
+            if let Err(err) = handle_event(
+                &event,
+                &compiler,
+                &bridge,
+                &rollback,
+                &shadows,
+                &project_root,
+                &preferred,
+            )
+            .await
             {
                 error!(?err, path = %event.path.display(), "hot-reload cycle failed");
                 let _ = bridge
@@ -136,17 +149,40 @@ async fn handle_event(
     bridge: &Arc<dyn AgentBridge>,
     rollback: &Arc<RollbackStore>,
     shadows: &Arc<ShadowRegistry>,
+    project_root: &std::path::Path,
+    preferred: &str,
 ) -> Result<()> {
-    info!(path = %event.path.display(), kind = ?event.kind, "change detected");
+    // Only `.java` saves drive the pipeline. IDE writes to `target/classes` are ignored.
+    if !matches!(event.kind, watcher::ChangeKind::JavaSource) {
+        return Ok(());
+    }
 
-    let artifact = match event.kind {
-        watcher::ChangeKind::JavaSource => {
-            let req = CompileRequest::from_source(&event.path);
-            compiler.compile_async(req).await?
+    info!(
+        "[WATCHER] Change detected in {}",
+        event.path.display()
+    );
+
+    // Force re-compile — never push stale IDE bytecode.
+    info!(
+        "[WATCHER] Force re-compile via javac --release {}",
+        compiler.release()
+    );
+    let artifact = compiler
+        .compile_async(CompileRequest::from_source(&event.path))
+        .await?;
+
+    // Pin to the `javar run` process when set; otherwise resolve by project.
+    let target = if let Ok(pinned) = std::env::var("JAVAR_PINNED_ADDR") {
+        if !pinned.is_empty() {
+            pinned
+        } else {
+            resolve_agent_addr(preferred, project_root)
         }
-        watcher::ChangeKind::ClassFile => compiler.load_class_bytes(&event.path)?,
-        watcher::ChangeKind::Other => return Ok(()),
+    } else {
+        resolve_agent_addr(preferred, project_root)
     };
+    bridge.retarget(target.clone()).await?;
+    info!(agent = %target, "[WATCHER] Sending bytecode to pinned/project agent");
 
     rollback.snapshot(&artifact.class_name, &artifact.bytecode);
 
@@ -179,6 +215,7 @@ async fn handle_event(
         class = %artifact.class_name,
         bytes = artifact.bytecode.len(),
         ?change,
+        agent = %target,
         "bytecode sent to agent"
     );
 

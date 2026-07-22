@@ -31,6 +31,30 @@ public final class ManagedClassTransformer implements ClassFileTransformer {
     private static final String ANN = "Lcom/javar/agent/managed/JavaRManaged;";
     private static final String RUNTIME = "com/javar/agent/managed/JavaRManagedRuntime";
 
+    /**
+     * Apply the same rewrite used at class-load time so hot-reload bytecode matches
+     * the already-transformed JVM schema (avoids HotSwap schema mismatch).
+     *
+     * @return transformed bytes, or the original buffer if the class is not {@code @JavaRManaged}
+     */
+    public static byte[] prepareForHotReload(String binaryClassName, byte[] classfileBuffer) {
+        if (binaryClassName == null || classfileBuffer == null) {
+            return classfileBuffer;
+        }
+        String internal = binaryClassName.replace('.', '/');
+        try {
+            // Already prepared (e.g. IDE pushed transformed bytes) — do not double-weave.
+            if (alreadyTransformed(classfileBuffer)) {
+                return classfileBuffer;
+            }
+            byte[] out = transformManaged(internal, classfileBuffer);
+            return out != null ? out : classfileBuffer;
+        } catch (Throwable t) {
+            LOG.log(Level.WARNING, "prepareForHotReload failed for " + binaryClassName, t);
+            return classfileBuffer;
+        }
+    }
+
     @Override
     public byte[] transform(
             ClassLoader loader,
@@ -50,31 +74,76 @@ public final class ManagedClassTransformer implements ClassFileTransformer {
             return null;
         }
 
+        // CRITICAL: redefineClasses() re-invokes transformers. ClassRedefiner already
+        // ran prepareForHotReload — transforming again double-weaves constructors and
+        // causes VerifyError / 500 on the next `new Trade()`.
+        if (classBeingRedefined != null) {
+            return null;
+        }
+
         try {
-            ClassReader probe = new ClassReader(classfileBuffer);
-            AnnotationProbe ap = new AnnotationProbe();
-            probe.accept(ap, ClassReader.SKIP_CODE | ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
-            if (!ap.managed) {
+            if (alreadyTransformed(classfileBuffer)) {
                 return null;
             }
-
-            ClassReader reader = new ClassReader(classfileBuffer);
-            ClassWriter writer = new ClassWriter(reader, ClassWriter.COMPUTE_FRAMES | ClassWriter.COMPUTE_MAXS);
-            ManagedClassVisitor visitor = new ManagedClassVisitor(writer, className);
-            reader.accept(visitor, ClassReader.EXPAND_FRAMES);
-
-            FieldLayout layout = visitor.buildLayout();
-            if (layout.totalSize() > 0) {
-                JavaRManagedRuntime.registerLayout(layout);
-            }
-
-            byte[] out = writer.toByteArray();
-            LOG.info("JavaRManaged transformed " + className.replace('/', '.')
-                    + " (" + layout.slots().size() + " off-heap fields, "
-                    + layout.totalSize() + " bytes/instance)");
-            return out;
+            return transformManaged(className, classfileBuffer);
         } catch (Throwable t) {
             LOG.log(Level.WARNING, "JavaRManaged transform failed for " + className, t);
+            return null;
+        }
+    }
+
+    /** True when bytecode already has the synthetic region field (post-transform). */
+    private static boolean alreadyTransformed(byte[] classfileBuffer) {
+        try {
+            ClassReader reader = new ClassReader(classfileBuffer);
+            RegionProbe probe = new RegionProbe();
+            reader.accept(probe, ClassReader.SKIP_CODE | ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
+            return probe.hasRegion;
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    /** @return rewritten bytes, or {@code null} if not a managed class / no change */
+    private static byte[] transformManaged(String className, byte[] classfileBuffer) {
+        ClassReader probe = new ClassReader(classfileBuffer);
+        AnnotationProbe ap = new AnnotationProbe();
+        probe.accept(ap, ClassReader.SKIP_CODE | ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
+        if (!ap.managed) {
+            return null;
+        }
+
+        ClassReader reader = new ClassReader(classfileBuffer);
+        ClassWriter writer = new ClassWriter(reader, ClassWriter.COMPUTE_FRAMES | ClassWriter.COMPUTE_MAXS);
+        ManagedClassVisitor visitor = new ManagedClassVisitor(writer, className);
+        reader.accept(visitor, ClassReader.EXPAND_FRAMES);
+
+        FieldLayout layout = visitor.buildLayout();
+        if (layout.totalSize() > 0) {
+            JavaRManagedRuntime.registerLayout(layout);
+        }
+
+        byte[] out = writer.toByteArray();
+        LOG.info("JavaRManaged transformed " + className.replace('/', '.')
+                + " (" + layout.slots().size() + " off-heap fields, "
+                + layout.totalSize() + " bytes/instance)");
+        return out;
+    }
+
+    private static final class RegionProbe extends ClassVisitor {
+        boolean hasRegion;
+
+        RegionProbe() {
+            super(Opcodes.ASM9);
+        }
+
+        @Override
+        public FieldVisitor visitField(
+                int access, String name, String descriptor, String signature, Object value) {
+            if (JavaRManagedRuntime.REGION_FIELD.equals(name)
+                    && JavaRManagedRuntime.REGION_DESC.equals(descriptor)) {
+                hasRegion = true;
+            }
             return null;
         }
     }
@@ -131,9 +200,11 @@ public final class ManagedClassTransformer implements ClassFileTransformer {
             if (mv == null) {
                 return null;
             }
-            MethodVisitor rewriter = new FieldAccessRewriter(mv, internalName, binaryName, primitiveFields);
+            // Snapshot fields known so far (javac emits fields before methods).
+            MethodVisitor rewriter =
+                    new FieldAccessRewriter(mv, internalName, binaryName, primitiveFields);
             if ("<init>".equals(name)) {
-                return new ConstructorWeaver(rewriter, binaryName);
+                return new ConstructorWeaver(rewriter, internalName, binaryName);
             }
             return rewriter;
         }
@@ -177,11 +248,13 @@ public final class ManagedClassTransformer implements ClassFileTransformer {
     }
 
     private static final class ConstructorWeaver extends MethodVisitor {
+        private final String ownerInternal;
         private final String binaryName;
         private boolean done;
 
-        ConstructorWeaver(MethodVisitor mv, String binaryName) {
+        ConstructorWeaver(MethodVisitor mv, String ownerInternal, String binaryName) {
             super(Opcodes.ASM9, mv);
+            this.ownerInternal = ownerInternal;
             this.binaryName = binaryName;
         }
 
@@ -189,7 +262,13 @@ public final class ManagedClassTransformer implements ClassFileTransformer {
         public void visitMethodInsn(
                 int opcode, String owner, String name, String descriptor, boolean isInterface) {
             super.visitMethodInsn(opcode, owner, name, descriptor, isInterface);
-            if (!done && opcode == Opcodes.INVOKESPECIAL && "<init>".equals(name)) {
+            // Only after the direct superclass <init> — never nest on other invokespecials.
+            if (!done
+                    && opcode == Opcodes.INVOKESPECIAL
+                    && "<init>".equals(name)
+                    && !ownerInternal.equals(owner)) {
+                // this.__javar_region = ensureRegion(this, className);
+                mv.visitVarInsn(Opcodes.ALOAD, 0);
                 mv.visitVarInsn(Opcodes.ALOAD, 0);
                 mv.visitLdcInsn(binaryName);
                 mv.visitMethodInsn(
@@ -198,7 +277,11 @@ public final class ManagedClassTransformer implements ClassFileTransformer {
                         "ensureRegion",
                         "(Ljava/lang/Object;Ljava/lang/String;)J",
                         false);
-                mv.visitInsn(Opcodes.POP2);
+                mv.visitFieldInsn(
+                        Opcodes.PUTFIELD,
+                        ownerInternal,
+                        JavaRManagedRuntime.REGION_FIELD,
+                        JavaRManagedRuntime.REGION_DESC);
                 done = true;
             }
         }
@@ -236,7 +319,6 @@ public final class ManagedClassTransformer implements ClassFileTransformer {
             int offset = localOffset(name);
 
             if (opcode == Opcodes.GETFIELD) {
-                // stack: obj → obj, className, offset → value
                 mv.visitLdcInsn(binaryName);
                 mv.visitLdcInsn(offset);
                 mv.visitMethodInsn(
@@ -249,7 +331,6 @@ public final class ManagedClassTransformer implements ClassFileTransformer {
             }
 
             if (opcode == Opcodes.PUTFIELD) {
-                // stack: obj, value → obj, value, className, offset → void
                 mv.visitLdcInsn(binaryName);
                 mv.visitLdcInsn(offset);
                 mv.visitMethodInsn(
@@ -322,7 +403,6 @@ public final class ManagedClassTransformer implements ClassFileTransformer {
             }
         }
 
-        /** {@code (Object, <value>, String, int)V} — matches PUTFIELD stack + ldc className/offset. */
         private static String setterPfDesc(String descriptor) {
             return "(Ljava/lang/Object;" + descriptor + "Ljava/lang/String;I)V";
         }

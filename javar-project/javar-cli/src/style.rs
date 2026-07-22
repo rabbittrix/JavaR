@@ -24,7 +24,3 @@ pub fn header(msg: impl Display) {
     eprintln!("{}", format!("  {msg}  ").bold().truecolor(99, 102, 241).on_truecolor(30, 27, 75));
     eprintln!();
 }
-
-pub fn accent(msg: impl Display) -> String {
-    format!("{msg}").truecolor(251, 146, 60).to_string()
-}

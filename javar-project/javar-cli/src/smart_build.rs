@@ -11,6 +11,7 @@ use std::time::Duration;
 
 /// `javar build` — package/compile the project in `root` (Maven or Gradle).
 pub fn cmd_build(root: &Path) -> Result<()> {
+    let _ = crate::layout_fix::maybe_fix_src_com_layout(root);
     let project = SmartProject::discover(root);
     style::header("javar build");
     style::info_line(crate::smart_run::describe_project(&project));
@@ -80,13 +81,28 @@ fn dir_has_classes(dir: &Path) -> bool {
         .any(|e| e.path().extension().and_then(|x| x.to_str()) == Some("class"))
 }
 
-/// `mvn -DskipTests clean package` as separate argv (no shell).
+/// `mvn -DskipTests clean package` with forced `-Dmaven.compiler.release`.
 fn run_maven_package(root: &Path) -> Result<()> {
     style::banner_line("Building project via Maven");
     let pb = spinner("Maven package");
-    // Prefer PATH Maven; only bootstrap when explicitly requested via tools install.
     let result = if crate::maven::resolve_mvn_no_bootstrap(root).is_ok() {
-        crate::maven::run_maven(root, &["-B", "-DskipTests", "clean", "package"])
+        let release = crate::version_sync::compiler_release_target(root)
+            .or_else(crate::version_sync::runtime_java_major);
+        if let Some(release) = release {
+            style::info_line(format!(
+                "Force compatibility: -Dmaven.compiler.release={release}"
+            ));
+            crate::maven::run_maven_aligned(
+                root,
+                release,
+                &["-B", "-DskipTests", "clean", "package"],
+            )
+        } else {
+            style::warn_line(
+                "Could not detect Java version — building without -Dmaven.compiler.release pin",
+            );
+            crate::maven::run_maven(root, &["-B", "-DskipTests", "clean", "package"])
+        }
     } else {
         style::warn_line(
             "Maven not on PATH — run `javar tools install` once, or install Maven yourself.",
