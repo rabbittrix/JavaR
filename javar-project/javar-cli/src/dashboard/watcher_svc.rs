@@ -17,6 +17,9 @@ struct WatcherState {
 
 /// Ensure a sidecar is watching `project` and sending bytecode only to `addr`.
 pub fn ensure_pinned_watcher(project: &Path, addr: &str) -> Option<String> {
+    if addr.trim().is_empty() || !addr.contains(':') {
+        return None;
+    }
     if !project.is_dir() {
         return None;
     }

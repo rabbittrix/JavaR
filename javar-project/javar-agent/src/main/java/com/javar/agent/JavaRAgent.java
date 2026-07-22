@@ -64,6 +64,17 @@ public final class JavaRAgent {
         }
         String lower = cmd.toLowerCase();
 
+        // Bloop / Metals / Scala build servers — always skip (before any "keep" heuristics).
+        if (lower.contains("bloop.bloopserver")
+                || lower.contains("bloopserver")
+                || lower.contains("bloop.server")
+                || lower.startsWith("bloop.")
+                || lower.contains("scala.meta.metals")
+                || lower.contains("metals.main")
+                || lower.contains("scala.cli")) {
+            return true;
+        }
+
         // Maven plexus parent (spring-boot:run forks the real app) — never bind here.
         if (lower.contains("plexus.classworlds.launcher")
                 || lower.contains("org.codehaus.plexus")
@@ -79,14 +90,18 @@ public final class JavaRAgent {
             if (!lower.contains("equinox")
                     && !lower.contains("eclipse")
                     && !lower.contains("language-server")
-                    && !lower.contains("languageserver")) {
+                    && !lower.contains("languageserver")
+                    && !lower.contains("bloop")) {
                 return false;
             }
         }
         // Main class style apps (com.foo.DemoApplication) — keep.
+        // Do not match tooling names that merely contain the substring "application".
         if (lower.contains("application")
                 && !lower.contains("launcher")
-                && !lower.contains("language")) {
+                && !lower.contains("language")
+                && !lower.contains("bloop")
+                && !lower.contains("metals")) {
             return false;
         }
 
@@ -109,12 +124,6 @@ public final class JavaRAgent {
                 || lower.contains("kotlin-language-server")
                 || lower.contains("gradle-language-server")
                 || lower.contains("spring-boot-language-server")
-                || lower.contains("scala.meta.metals")
-                || lower.contains("metals.main")
-                || lower.contains("bloop.bloopserver")
-                || lower.contains("bloopserver")
-                || lower.contains("bloop.Server")
-                || lower.contains("scala.cli")
                 || lower.contains("plexus.classworlds.launcher")
                 || lower.contains("org.codehaus.plexus");
     }
@@ -215,9 +224,36 @@ public final class JavaRAgent {
                     }
                 }
             }
+            String prop = System.getProperty("javar.agent.port");
+            if (prop != null && !prop.isEmpty()) {
+                try {
+                    port = Integer.parseInt(prop.trim());
+                } catch (NumberFormatException ignored) {
+                    // keep previous
+                }
+            }
             String env = System.getenv("JAVAR_AGENT_PORT");
             if (env != null && !env.isEmpty()) {
-                port = Integer.parseInt(env);
+                try {
+                    port = Integer.parseInt(env.trim());
+                } catch (NumberFormatException ignored) {
+                    // keep previous
+                }
+            }
+            // Workspace inject sets JAVAR_AGENT_ADDR=127.0.0.1:PORT
+            String addr = System.getenv("JAVAR_AGENT_ADDR");
+            if (addr == null || addr.isEmpty()) {
+                addr = System.getenv("JAVAR_PINNED_ADDR");
+            }
+            if (addr != null && !addr.isEmpty()) {
+                int colon = addr.lastIndexOf(':');
+                if (colon >= 0 && colon + 1 < addr.length()) {
+                    try {
+                        port = Integer.parseInt(addr.substring(colon + 1).trim());
+                    } catch (NumberFormatException ignored) {
+                        // keep previous
+                    }
+                }
             }
             return new AgentOptions(port);
         }

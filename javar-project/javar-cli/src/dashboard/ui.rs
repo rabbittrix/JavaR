@@ -112,11 +112,11 @@ fn draw_process_picker_modal(frame: &mut Frame, app: &App) {
                 Style::default().fg(ORANGE),
             ))),
             ListItem::new(Line::from(Span::styled(
-                "  IDE language servers are hidden. Restart your Spring Boot / app JVM",
+                "  Run:  javar inject   then restart  mvn spring-boot:run  / Run Java",
                 Style::default().fg(DIM),
             ))),
             ListItem::new(Line::from(Span::styled(
-                "  so it can bind 19222 (after updating ~/.javar/bin/javar-agent.jar).",
+                "  (Bloop/IDE JVMs are hidden — they must not own the agent port.)",
                 Style::default().fg(DIM),
             ))),
         ]

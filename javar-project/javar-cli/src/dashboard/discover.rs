@@ -125,10 +125,14 @@ pub fn best_live_agent(agents: &[DiscoveredAgent]) -> Option<usize> {
     agents
         .iter()
         .enumerate()
-        .filter(|(_, a)| a.is_user_project || a.priority >= 40)
+        .filter(|(_, a)| {
+            !is_ide_noise(&a.name.to_lowercase(), &a.cmd.to_lowercase())
+                && (a.is_user_project || a.priority >= 50)
+        })
         .max_by(|(_, a), (_, b)| {
-            a.priority
-                .cmp(&b.priority)
+            a.is_user_project
+                .cmp(&b.is_user_project)
+                .then(a.priority.cmp(&b.priority))
                 .then(a.started_ms.cmp(&b.started_ms))
                 .then(a.port.cmp(&b.port))
         })
@@ -639,22 +643,45 @@ pub fn auto_select(
         }
     }
 
-    if agents.len() > 1 {
-        let preselect = best_live_agent(agents).unwrap_or(0);
+    // Prefer real apps; never auto-pick IDE/Bloop noise.
+    let user: Vec<usize> = agents
+        .iter()
+        .enumerate()
+        .filter_map(|(i, a)| {
+            if is_ide_noise(&a.name.to_lowercase(), &a.cmd.to_lowercase()) {
+                return None;
+            }
+            if a.is_user_project || a.priority >= 50 {
+                Some(i)
+            } else {
+                None
+            }
+        })
+        .collect();
+    if user.is_empty() {
+        return (None, false);
+    }
+    if user.len() > 1 {
+        let preselect = best_live_agent(agents).unwrap_or(user[0]);
         return (Some(preselect), true);
     }
 
-    // Exactly one agent — connect directly (still prefer remembered if it matches).
+    // Exactly one usable agent — connect directly (still prefer remembered if it matches).
     if let Some((name, pid, port)) = load_remembered(workspace) {
         if let Some(i) = agents.iter().position(|a| {
             (a.pid == pid && a.pid != 0)
                 || (a.port == port && (!name.is_empty() && a.name == name))
                 || (!name.is_empty() && a.name.eq_ignore_ascii_case(&name))
         }) {
-            return (Some(i), false);
+            if !is_ide_noise(
+                &agents[i].name.to_lowercase(),
+                &agents[i].cmd.to_lowercase(),
+            ) {
+                return (Some(i), false);
+            }
         }
     }
-    (Some(0), false)
+    (Some(user[0]), false)
 }
 
 fn load_run_session_port() -> Option<u16> {

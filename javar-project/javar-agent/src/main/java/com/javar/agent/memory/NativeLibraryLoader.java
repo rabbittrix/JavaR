@@ -1,6 +1,8 @@
 package com.javar.agent.memory;
 
 import java.io.File;
+import java.net.URL;
+import java.security.CodeSource;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -41,6 +43,9 @@ public final class NativeLibraryLoader {
                 if (explicit == null || explicit.isEmpty()) {
                     explicit = System.getenv("JAVAR_NATIVE_PATH");
                 }
+                if ((explicit == null || explicit.isEmpty())) {
+                    explicit = siblingOfAgentJar();
+                }
                 if (explicit != null && !explicit.isEmpty()) {
                     System.load(new File(explicit).getAbsolutePath());
                     LOG.info("Loaded JavaR native library from " + explicit);
@@ -68,6 +73,41 @@ public final class NativeLibraryLoader {
             return true;
         } catch (UnsatisfiedLinkError e) {
             return false;
+        }
+    }
+
+    /**
+     * When Spring Boot injects only {@code -javaagent:.../javar-agent.jar} (no
+     * {@code -Djavar.native.path}), load {@code javar_core} from the same directory.
+     */
+    private static String siblingOfAgentJar() {
+        try {
+            CodeSource cs = NativeLibraryLoader.class.getProtectionDomain().getCodeSource();
+            if (cs == null) {
+                return null;
+            }
+            URL loc = cs.getLocation();
+            if (loc == null) {
+                return null;
+            }
+            File jar = new File(loc.toURI());
+            File dir = jar.isFile() ? jar.getParentFile() : jar;
+            if (dir == null) {
+                return null;
+            }
+            String os = System.getProperty("os.name", "").toLowerCase();
+            String name;
+            if (os.contains("win")) {
+                name = "javar_core.dll";
+            } else if (os.contains("mac") || os.contains("darwin")) {
+                name = "libjavar_core.dylib";
+            } else {
+                name = "libjavar_core.so";
+            }
+            File sibling = new File(dir, name);
+            return sibling.isFile() ? sibling.getAbsolutePath() : null;
+        } catch (Exception e) {
+            return null;
         }
     }
 }

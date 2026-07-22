@@ -12,6 +12,7 @@ mod smart_run;
 mod style;
 mod tools_cmd;
 mod version_sync;
+mod workspace_inject;
 
 use anyhow::{bail, Context, Result};
 use bytes::Bytes;
@@ -118,6 +119,14 @@ enum Commands {
         #[command(subcommand)]
         action: ToolsCmd,
     },
+    /// Inject -javaagent into this project for `mvn spring-boot:run` / Run Java
+    /// (writes `.mvn/maven.config` + `.vscode/settings.json` — never global env).
+    Inject {
+        #[arg(value_name = "PATH", default_value = ".")]
+        path: PathBuf,
+        #[arg(long, default_value_t = 19222)]
+        port: u16,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -193,6 +202,7 @@ fn main() -> Result<()> {
         Commands::Tools { action } => match action {
             ToolsCmd::Install { path } => tools_cmd::cmd_tools_install(&path),
         },
+        Commands::Inject { path, port } => workspace_inject::cmd_inject(&path, port),
     }
 }
 
@@ -580,6 +590,14 @@ fn resolve_core_bin(project: &Path) -> Option<PathBuf> {
 
 pub(crate) fn workspace_root(hint: &Path) -> PathBuf {
     let hint = hint.canonicalize().unwrap_or_else(|_| hint.to_path_buf());
+    // Java / Gradle app roots — never walk away from the user's project.
+    if hint.join("pom.xml").is_file()
+        || hint.join("build.gradle").is_file()
+        || hint.join("build.gradle.kts").is_file()
+        || hint.join("src/main/java").is_dir()
+    {
+        return hint;
+    }
     if hint.join("Cargo.toml").exists() && hint.join("javar-core").exists() {
         return hint;
     }
@@ -590,6 +608,12 @@ pub(crate) fn workspace_root(hint: &Path) -> PathBuf {
     }
     let mut cur = hint.as_path();
     loop {
+        if cur.join("pom.xml").is_file()
+            || cur.join("build.gradle").is_file()
+            || cur.join("build.gradle.kts").is_file()
+        {
+            return cur.to_path_buf();
+        }
         if cur.join("Cargo.toml").exists() && cur.join("javar-core").is_dir() {
             return cur.to_path_buf();
         }
@@ -598,5 +622,5 @@ pub(crate) fn workspace_root(hint: &Path) -> PathBuf {
             None => break,
         }
     }
-    PathBuf::from(".")
+    hint
 }

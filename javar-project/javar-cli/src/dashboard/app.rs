@@ -126,13 +126,20 @@ impl App {
         }
         // Do NOT force the picker just because multiple agents exist — folder auto-select wins.
 
+        // Never fall back to a default :19222 — that port is often Bloop/IDE noise
+        // and shows a fake ACTIVE dashboard with "(awaiting reload)".
+        let _ = fallback_addr;
         let agent_addr = if need_picker {
             String::new()
         } else {
             available_processes
                 .get(agent_index)
+                .filter(|a| a.is_user_project || !discover::is_ide_noise(
+                    &a.name.to_lowercase(),
+                    &a.cmd.to_lowercase(),
+                ))
                 .map(|a| a.socket_addr())
-                .unwrap_or(fallback_addr)
+                .unwrap_or_default()
         };
 
         let mut picker_state = ListState::default();
@@ -222,6 +229,9 @@ impl App {
 
     /// Start / retarget `javar-core` so .java saves redefine THIS process.
     fn ensure_reload_watcher(&mut self) {
+        if self.agent_addr.is_empty() {
+            return;
+        }
         let project = self
             .available_processes
             .get(self.agent_index)
@@ -427,8 +437,25 @@ impl App {
         if self.show_picker && self.agent_addr.is_empty() {
             return;
         }
+        // App started after the dashboard (mvn spring-boot:run / Run Java) — attach.
         if self.agent_addr.is_empty() {
-            return;
+            if let Some(idx) = discover::best_live_agent(&self.available_processes) {
+                if let Some(selected) = self.available_processes.get(idx).cloned() {
+                    self.agent_index = idx;
+                    self.agent_addr = selected.socket_addr();
+                    self.picker_state.select(Some(idx));
+                    discover::remember_selection(Some(self.workspace.as_path()), &selected);
+                    self.push_log(format!(
+                        "auto-connected to {} (PID {}) @ {}",
+                        selected.display_name(),
+                        selected.pid,
+                        self.agent_addr
+                    ));
+                    self.ensure_reload_watcher();
+                }
+            } else {
+                return;
+            }
         }
 
         let prev = self.agent.connected;

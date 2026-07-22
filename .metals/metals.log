@@ -399,3 +399,39 @@ INFO: Unsupported notification method: $/setTrace
 2026.07.22 01:01:45 WARN  no build target for: G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\ClassRedefiner.java
 2026.07.22 01:01:45 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\ClassRedefiner.java. Using fallback presentation compiler.
 2026.07.22 01:01:47 INFO  time: code lens generation in 1.49s
+2026.07.22 01:04:40 WARN  no build target for: G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\AgentSocketServer.java
+2026.07.22 01:04:40 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\AgentSocketServer.java. Using fallback presentation compiler.
+2026.07.22 01:04:40 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\ClassRedefiner.java. Using fallback presentation compiler.
+2026.07.22 01:04:40 WARN  no build target for: G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\AgentSocketServer.java
+2026.07.22 01:04:40 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\ClassRedefiner.java. Using fallback presentation compiler.
+2026.07.22 01:04:42 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\AgentSocketServer.java. Using fallback presentation compiler.
+2026.07.22 01:04:44 WARN  no build target for: G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\AgentRegistry.java
+2026.07.22 01:04:44 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\ClassRedefiner.java. Using fallback presentation compiler.
+2026.07.22 01:04:58 WARN  no build target for: G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\ClassRedefiner.java
+2026.07.22 01:04:58 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\ClassRedefiner.java. Using fallback presentation compiler.
+2026.07.22 01:04:58 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\ClassRedefiner.java. Using fallback presentation compiler.
+2026.07.22 01:05:58 WARN  no build target for: G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\JavaRAgent.java
+2026.07.22 01:05:58 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\ClassRedefiner.java. Using fallback presentation compiler.
+2026.07.22 01:06:40 WARN  no build target for: G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\ClassRedefiner.java
+2026.07.22 01:06:40 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\ClassRedefiner.java. Using fallback presentation compiler.
+2026.07.22 01:07:20 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\ClassRedefiner.java. Using fallback presentation compiler.
+2026.07.22 01:07:28 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\ClassRedefiner.java. Using fallback presentation compiler.
+2026.07.22 01:07:30 WARN  no build target for: G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\ClassRedefiner.java
+2026.07.22 01:07:30 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\ClassRedefiner.java. Using fallback presentation compiler.
+2026.07.22 01:07:40 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\AgentSocketServer.java. Using fallback presentation compiler.
+2026.07.22 01:07:44 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\AgentRegistry.java. Using fallback presentation compiler.
+2026.07.22 01:08:13 WARN  no build target for: G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\AgentRegistry.java
+2026.07.22 01:08:13 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\ClassRedefiner.java. Using fallback presentation compiler.
+2026.07.22 01:08:58 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\JavaRAgent.java. Using fallback presentation compiler.
+2026.07.22 01:11:13 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\AgentRegistry.java. Using fallback presentation compiler.
+2026.07.22 01:15:41 WARN  no build target for: G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\ClassRedefiner.java
+2026.07.22 01:15:41 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\ClassRedefiner.java. Using fallback presentation compiler.
+2026.07.22 01:15:46 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\ClassRedefiner.java. Using fallback presentation compiler.
+2026.07.22 01:15:59 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\ClassRedefiner.java. Using fallback presentation compiler.
+2026.07.22 01:17:17 WARN  Using H2 2.4.240 which is newer than the version Flyway has been verified with. The latest verified version of H2 is 2.3.232.
+2026.07.22 01:17:18 WARN  no build target for: D:\spring-javar-demo\src\main\java\com\javar\demo\controller\TradeController.java
+2026.07.22 01:20:17 INFO  no build target found for D:\spring-javar-demo\src\main\java\com\javar\demo\controller\TradeController.java. Using fallback presentation compiler.
+2026.07.22 01:24:08 WARN  no build target for: G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\managed\ManagedClassTransformer.java
+2026.07.22 01:24:16 WARN  no build target for: D:\spring-javar-demo\src\main\java\com\javar\demo\model\Trade.java
+2026.07.22 01:27:08 INFO  no build target found for G:\Project_JavaR\javar-project\javar-agent\src\main\java\com\javar\agent\managed\ManagedClassTransformer.java. Using fallback presentation compiler.
+2026.07.22 01:27:16 INFO  no build target found for D:\spring-javar-demo\src\main\java\com\javar\demo\model\Trade.java. Using fallback presentation compiler.

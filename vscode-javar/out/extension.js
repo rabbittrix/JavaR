@@ -42,6 +42,7 @@ const os = __importStar(require("os"));
 const path = __importStar(require("path"));
 const child_process_1 = require("child_process");
 const ensureCli_1 = require("./ensureCli");
+const workspaceInject_1 = require("./workspaceInject");
 let statusBar;
 let coreProc;
 let pollTimer;
@@ -58,7 +59,7 @@ function activate(context) {
     context.subscriptions.push(statusBar);
     const regions = new RegionsProvider();
     vscode.window.registerTreeDataProvider("javar.regions", regions);
-    context.subscriptions.push(vscode.commands.registerCommand("javar.connect", () => connectAndPoll(regions)), vscode.commands.registerCommand("javar.forceResync", () => forceResync()), vscode.commands.registerCommand("javar.startCli", () => startSidecar()), vscode.commands.registerCommand("javar.openDashboard", () => openDashboard()), vscode.commands.registerCommand("javar.installCli", () => installCli()));
+    context.subscriptions.push(vscode.commands.registerCommand("javar.connect", () => connectAndPoll(regions)), vscode.commands.registerCommand("javar.forceResync", () => forceResync()), vscode.commands.registerCommand("javar.startCli", () => startSidecar()), vscode.commands.registerCommand("javar.openDashboard", () => openDashboard()), vscode.commands.registerCommand("javar.installCli", () => installCli()), vscode.commands.registerCommand("javar.configureWorkspace", () => configureWorkspace(true)));
     void bootstrap(regions);
 }
 async function bootstrap(regions) {
@@ -66,12 +67,35 @@ async function bootstrap(regions) {
     const configured = cfg.get("cliPath", "javar");
     const offer = cfg.get("autoInstallCli", true);
     resolvedCli = await (0, ensureCli_1.ensureJavarCli)(configured, offer);
+    // Workspace-scoped agent for Run Java / mvn / Spring Boot (never user-global env).
+    if (cfg.get("injectWorkspace", true) && vscode.workspace.workspaceFolders?.length) {
+        await configureWorkspace(false);
+    }
     // Cockpit never launches the app JVM — only sidecar + telemetry.
     if (cfg.get("autoStart", true) && vscode.workspace.workspaceFolders?.length) {
         void connectAndPoll(regions);
         if (resolvedCli) {
             void startSidecar(true);
         }
+    }
+}
+/** Inject -javaagent into workspace settings + integrated terminal env. */
+async function configureWorkspace(showMessage) {
+    const cfg = vscode.workspace.getConfiguration("javar");
+    const preferred = cfg.get("agentPort", 19222);
+    const port = await (0, workspaceInject_1.allocateAgentPort)(preferred);
+    resolvedAgentPort = port;
+    const result = await (0, workspaceInject_1.configureWorkspaceInjection)(port);
+    if (!result) {
+        if (showMessage) {
+            vscode.window.showWarningMessage("JavaR: agent/native not found under ~/.javar/bin — run `javar setup` or JavaR: Install / Repair CLI");
+        }
+        return;
+    }
+    // Persist chosen port so sidecar + Run Java stay aligned.
+    await cfg.update("agentPort", port, vscode.ConfigurationTarget.Workspace);
+    if (showMessage) {
+        vscode.window.showInformationMessage(`JavaR workspace ready — Run Java / mvn / spring-boot:run will load the agent (port ${result.port}). Open a new terminal if needed.`);
     }
 }
 async function installCli() {
@@ -173,23 +197,27 @@ async function startSidecar(quiet = false) {
     const port = resolvedAgentPort;
     const coreBin = resolveCoreBinary(cli);
     if (coreBin) {
+        const agentAddr = `127.0.0.1:${port}`;
         coreProc = (0, child_process_1.spawn)(coreBin, [folder], {
             cwd: folder,
             shell: false,
             env: {
                 ...process.env,
-                JAVAR_AGENT_ADDR: `127.0.0.1:${port}`,
+                JAVAR_AGENT_ADDR: agentAddr,
+                JAVAR_PINNED_ADDR: agentAddr,
                 JAVAR_PROJECT_NAME: projectName,
             },
         });
     }
     else {
+        const agentAddr = `127.0.0.1:${port}`;
         coreProc = (0, child_process_1.spawn)(cli, ["run", folder, "--watch-only", "--port", String(port)], {
             cwd: folder,
             shell: true,
             env: {
                 ...process.env,
-                JAVAR_AGENT_ADDR: `127.0.0.1:${port}`,
+                JAVAR_AGENT_ADDR: agentAddr,
+                JAVAR_PINNED_ADDR: agentAddr,
                 JAVAR_PROJECT_NAME: projectName,
             },
         });
@@ -231,13 +259,16 @@ function resolveBestAgentPort(fallback, workspaceName) {
         try {
             const j = JSON.parse(fs.readFileSync(path.join(dir, f), "utf8"));
             const port = Number(j.port || 0);
-            if (port < 19222 || port > 19232)
+            if (port < 19222 || port > 19242)
                 continue;
             const name = String(j.name || j.project_name || "").toLowerCase();
             const cmd = String(j.cmd || "").toLowerCase();
+            const launched = String(j.launched_by || "").toLowerCase();
             if (isTooling(name, cmd))
                 continue;
             let score = 40;
+            if (launched === "javar-run" || launched === "vscode")
+                score += 400;
             if (name.endsWith("application") || cmd.includes("application"))
                 score += 200;
             if (name.includes("spring") || cmd.includes("springframework"))
@@ -269,6 +300,9 @@ function isTooling(name, cmd) {
         "languageserver",
         "language-server",
         "metals",
+        "bloop",
+        "bloopserver",
+        "scala.cli",
         "plexus",
         "classworlds.launcher",
         "spring-boot-language-server",
@@ -373,7 +407,7 @@ class RegionsProvider {
             new vscode.TreeItem(`Project: ${this.project || "(unknown)"}`),
             new vscode.TreeItem(`Managed regions: ${this.regions}`),
             new vscode.TreeItem(`Off-heap bytes: ${mb} MB`),
-            new vscode.TreeItem("Mode: sidecar + telemetry (app via IDE / JAVA_TOOL_OPTIONS)"),
+            new vscode.TreeItem("Mode: workspace inject + sidecar (Run Java / mvn / Spring Boot)"),
         ]);
     }
 }

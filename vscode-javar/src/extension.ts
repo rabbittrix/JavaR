@@ -5,6 +5,7 @@ import * as os from "os";
 import * as path from "path";
 import { spawn, ChildProcess } from "child_process";
 import { ensureJavarCli } from "./ensureCli";
+import { allocateAgentPort, configureWorkspaceInjection } from "./workspaceInject";
 
 let statusBar: vscode.StatusBarItem;
 let coreProc: ChildProcess | undefined;
@@ -30,7 +31,8 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("javar.forceResync", () => forceResync()),
     vscode.commands.registerCommand("javar.startCli", () => startSidecar()),
     vscode.commands.registerCommand("javar.openDashboard", () => openDashboard()),
-    vscode.commands.registerCommand("javar.installCli", () => installCli())
+    vscode.commands.registerCommand("javar.installCli", () => installCli()),
+    vscode.commands.registerCommand("javar.configureWorkspace", () => configureWorkspace(true))
   );
 
   void bootstrap(regions);
@@ -42,12 +44,41 @@ async function bootstrap(regions: RegionsProvider): Promise<void> {
   const offer = cfg.get<boolean>("autoInstallCli", true);
   resolvedCli = await ensureJavarCli(configured, offer);
 
+  // Workspace-scoped agent for Run Java / mvn / Spring Boot (never user-global env).
+  if (cfg.get<boolean>("injectWorkspace", true) && vscode.workspace.workspaceFolders?.length) {
+    await configureWorkspace(false);
+  }
+
   // Cockpit never launches the app JVM — only sidecar + telemetry.
   if (cfg.get<boolean>("autoStart", true) && vscode.workspace.workspaceFolders?.length) {
     void connectAndPoll(regions);
     if (resolvedCli) {
       void startSidecar(true);
     }
+  }
+}
+
+/** Inject -javaagent into workspace settings + integrated terminal env. */
+async function configureWorkspace(showMessage: boolean): Promise<void> {
+  const cfg = vscode.workspace.getConfiguration("javar");
+  const preferred = cfg.get<number>("agentPort", 19222);
+  const port = await allocateAgentPort(preferred);
+  resolvedAgentPort = port;
+  const result = await configureWorkspaceInjection(port);
+  if (!result) {
+    if (showMessage) {
+      vscode.window.showWarningMessage(
+        "JavaR: agent/native not found under ~/.javar/bin — run `javar setup` or JavaR: Install / Repair CLI"
+      );
+    }
+    return;
+  }
+  // Persist chosen port so sidecar + Run Java stay aligned.
+  await cfg.update("agentPort", port, vscode.ConfigurationTarget.Workspace);
+  if (showMessage) {
+    vscode.window.showInformationMessage(
+      `JavaR workspace ready — Run Java / mvn / spring-boot:run will load the agent (port ${result.port}). Open a new terminal if needed.`
+    );
   }
 }
 
@@ -228,11 +259,13 @@ function resolveBestAgentPort(fallback: number, workspaceName: string): number {
         cmd?: string;
       };
       const port = Number(j.port || 0);
-      if (port < 19222 || port > 19232) continue;
+      if (port < 19222 || port > 19242) continue;
       const name = String(j.name || j.project_name || "").toLowerCase();
       const cmd = String(j.cmd || "").toLowerCase();
+      const launched = String((j as { launched_by?: string }).launched_by || "").toLowerCase();
       if (isTooling(name, cmd)) continue;
       let score = 40;
+      if (launched === "javar-run" || launched === "vscode") score += 400;
       if (name.endsWith("application") || cmd.includes("application")) score += 200;
       if (name.includes("spring") || cmd.includes("springframework")) score += 120;
       if (name.includes("demo") || cmd.includes("demo")) score += 80;
@@ -260,6 +293,9 @@ function isTooling(name: string, cmd: string): boolean {
     "languageserver",
     "language-server",
     "metals",
+    "bloop",
+    "bloopserver",
+    "scala.cli",
     "plexus",
     "classworlds.launcher",
     "spring-boot-language-server",
@@ -374,7 +410,7 @@ class RegionsProvider implements vscode.TreeDataProvider<vscode.TreeItem> {
       new vscode.TreeItem(`Project: ${this.project || "(unknown)"}`),
       new vscode.TreeItem(`Managed regions: ${this.regions}`),
       new vscode.TreeItem(`Off-heap bytes: ${mb} MB`),
-      new vscode.TreeItem("Mode: sidecar + telemetry (launch app with: javar run)"),
+      new vscode.TreeItem("Mode: workspace inject + sidecar (Run Java / mvn / Spring Boot)"),
     ]);
   }
 }
